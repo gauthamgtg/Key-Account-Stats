@@ -2,7 +2,7 @@ pandas
 numpy
 streamlit
 matplotlib.pyplot
-streamlit_option_menu 
+streamlit_option_menu==0.3.2 
 psycopg2
 functools 
 pandas

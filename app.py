@@ -291,7 +291,7 @@ elif selected == "Raw Data" and st.session_state.status == "verified":
 
 elif selected == "Overall Stats - Ind" and st.session_state.status == "verified":
 
-    st.title("Overall Stats Page - India")
+    st.title("Overall Stats - India")
 
     indian_df = df[df['currency_code'].str.lower() == 'inr']
     
@@ -339,8 +339,18 @@ elif selected == "Overall Stats - Ind" and st.session_state.status == "verified"
     else:
         avg_ind_spend_change = 0
 
+    
+    # Filter the DataFrame to get the current month’s data
+    ind_current_month_df = indian_df[
+        (pd.to_datetime(indian_df['dt']).dt.month == current_month) &
+        (pd.to_datetime(indian_df['dt']).dt.year == current_year)
+    ]
+
+    # Calculate the total spend for the current month
+    total_current_month_spend = ind_current_month_df['spend'].sum()
+
     # Display the metrics
-    col1, col2, col3 = st.columns(3)
+    col1, col2, col3, col4 = st.columns(4)
 
     # Metric 1: Yesterday's Spend and change %
     col1.metric("Yesterday Spend", f"₹{ind_yst_spend}", f"{ind_spend_change}%")
@@ -351,12 +361,23 @@ elif selected == "Overall Stats - Ind" and st.session_state.status == "verified"
     # Metric 3: Average Spend per Ad Account and change %
     col3.metric("Avg Spend per Ad Account", f"₹{round(ind_avg_spend_per_account_yesterday, 2)}", f"{avg_ind_spend_change}%")
 
-    st.dataframe(indian_df)
-    st.dataframe(ind_grouped_data_adacclevel)
+    # Display the current month spend as a metric
+    col4.metric(label="Current Month Spend", value=f"₹{total_current_month_spend:,.2f}")
+
+
+    st.write("Yesterday spend data:")
+    st.dataframe(indian_df[indian_df['dt']==yesterday], use_container_width=True)
+
+    st.write("Current Month spend data:")
+    st.dataframe(ind_current_month_df, use_container_width=True)
+
+
+    st.dataframe(indian_df, use_container_width=True)
+    st.dataframe(ind_grouped_data_adacclevel, use_container_width=True)
 
     st.write('Day level spends')
     ind_grouped_data = indian_df.groupby(['dt'])['spend'].sum().reset_index().sort_values(by='dt', ascending=False)
-    st.dataframe(ind_grouped_data)
+    st.dataframe(ind_grouped_data, use_container_width=True)
 
     st.line_chart(ind_grouped_data, x='dt', y='spend')
 
@@ -479,21 +500,21 @@ elif selected == "Overall Stats - US" and st.session_state.status == "verified":
     col4.metric(label="Current Month Spend (in USD)", value=f"${total_current_month_spend:,.2f}")
 
     st.write("Yesterday spend data:")
-    st.dataframe(us_df[us_df['dt']==yesterday])
+    st.dataframe(us_df[us_df['dt']==yesterday], use_container_width=True)
 
     st.write("Current Month spend data:")
-    st.dataframe(current_month_df)
+    st.dataframe(current_month_df, use_container_width=True)
 
     # Display the updated DataFrame
     st.write("Full Table with Spend in USD:")
-    st.dataframe(us_df)
+    st.dataframe(us_df, use_container_width=True)
 
     # Display the updated DataFrame
     st.write("Updated Table with Spend in USD:")
-    st.dataframe(us_grouped_data_adacclevel)
+    st.dataframe(us_grouped_data_adacclevel, use_container_width=True)
 
     st.write('Day level spends')
     us_grouped_data = us_df.groupby(['dt'])['spend_in_usd'].sum().reset_index().sort_values(by='dt', ascending=False)
-    st.dataframe(us_grouped_data)
+    st.dataframe(us_grouped_data, use_container_width=True)
 
     st.line_chart(us_grouped_data, x='dt', y='spend_in_usd')

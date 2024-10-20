@@ -141,8 +141,8 @@ current_year = datetime.now().year
 with st.sidebar:
     selected = option_menu(
         menu_title="Navigation",  # Required
-        options=["Login","Main Page", "Raw Data","Overall Stats - Ind","Overall Stats - US"],  # Required
-        icons=["lock","house", "table","currency-rupee",'currency-dollar'],  # Optional: icons from the Bootstrap library
+        options=["Login","Key Account Stats", "Raw Data","Overall Stats - Ind","Overall Stats - US"],  # Required
+        icons=["lock","airplane-engines", "table","currency-rupee",'currency-dollar'],  # Optional: icons from the Bootstrap library
         menu_icon="cast",  # Optional: main menu icon
         default_index=0,  # Default active menu item
     )
@@ -182,7 +182,7 @@ if selected == "Login":
 
 
 
-if selected == "Main Page" and st.session_state.status == "verified":
+if selected == "Key Account Stats" and st.session_state.status == "verified":
     st.title("Key Account Stats")
     st.write("Show detailed spends of top customers.")
 
@@ -206,6 +206,10 @@ if selected == "Main Page" and st.session_state.status == "verified":
     col2.subheader("Start Date : " + str(filtered_df['dt'].min()))
     col3.subheader("Last Active Date : " + str(filtered_df['dt'].max()))
 
+    cols1, cols2, cols3 = st.columns(3)
+    cols1.subheader("Yesterday Spend : " + str(filtered_df['dt'].max()))
+    cols2.subheader("Current Month Spend: " + str(filtered_df['dt'].min()))
+    cols3.metric("Last Month Spend:",filtered_df['spend'].sum())
    
 
     # Assuming your 'dt' column is already in date format (e.g., YYYY-MM-DD)
@@ -353,7 +357,7 @@ elif selected == "Overall Stats - Ind" and st.session_state.status == "verified"
     col1, col2, col3, col4 = st.columns(4)
 
     # Metric 1: Yesterday's Spend and change %
-    col1.metric("Yesterday Spend", f"₹{ind_yst_spend}", f"{ind_spend_change}%")
+    col1.metric("Yesterday Spend", f"₹{ind_yst_spend}", f"{ind_spend_change:,.2f}%")
 
     # Metric 2: Number of Ad Accounts and change %
     col2.metric("Ad Accounts", ind_num_ad_accounts_yesterday, f"{ind_ad_account_change}%")
@@ -371,8 +375,8 @@ elif selected == "Overall Stats - Ind" and st.session_state.status == "verified"
     st.write("Current Month spend data:")
     st.dataframe(ind_current_month_df, use_container_width=True)
 
-
-    st.dataframe(indian_df, use_container_width=True)
+    st.write("Overall spend data:")
+    # st.dataframe(indian_df, use_container_width=True)
     st.dataframe(ind_grouped_data_adacclevel, use_container_width=True)
 
     st.write('Day level spends')

@@ -111,7 +111,7 @@ from enterprise_users eu
     where a.ad_account_id is not null
     order by euid desc
     '''
-@st.cache_data
+@st.cache_data(ttl=86400)  # 86400 seconds = 24 hours
 @redshift_connection(db,name,passw,server,port)
 def execute_query(connection, cursor,query):
 
@@ -146,6 +146,10 @@ with st.sidebar:
         menu_icon="cast",  # Optional: main menu icon
         default_index=0,  # Default active menu item
     )
+        # Add a refresh button to the sidebar
+    if st.button("Refresh Data", key="refresh_button"):
+        st.cache_data.clear()  # Clear cached data
+        st.success("Cache cleared and data refreshed!")
 
 
 if selected == "Login":
@@ -179,6 +183,8 @@ if selected == "Login":
         st.stop()
     welcome()
 
+    
+
 
 
 
@@ -205,6 +211,24 @@ if selected == "Key Account Stats" and st.session_state.status == "verified":
     col1.metric("Total Spend",filtered_df['spend'].sum())
     col2.subheader("Start Date : " + str(filtered_df['dt'].min()))
     col3.subheader("Last Active Date : " + str(filtered_df['dt'].max()))
+
+    # Filter data for yesterday and day before yesterday
+    yesterday_data = filtered_df[filtered_df['dt'] == yesterday]
+    day_before_yst_data = filtered_df[filtered_df['dt'] == day_before_yst]
+
+    # Calculate the total spend for each day
+    ind_yst_spend = yesterday_data['spend'].sum()
+    ind_day_before_yst_spend = day_before_yst_data['spend'].sum()
+
+    # Filter the DataFrame to get the current month’s data
+    current_month_df = filtered_df[
+        (pd.to_datetime(filtered_df['dt']).dt.month == current_month) &
+        (pd.to_datetime(filtered_df['dt']).dt.year == current_year)
+    ]
+
+    # Calculate the total spend for the current month
+    total_current_month_spend = current_month_df['spend'].sum()
+
 
     cols1, cols2, cols3 = st.columns(3)
     cols1.subheader("Yesterday Spend : " + str(filtered_df['dt'].max()))

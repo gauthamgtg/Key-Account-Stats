@@ -38,6 +38,8 @@ st.set_page_config( page_title = "Spend Stats",
     layout="wide",
     initial_sidebar_state="expanded")
 
+# st.toast('Successfully connected to the database!!', icon='😍')
+
 st.write("Successfully connected to the database!")
 
 def redshift_connection(dbname, user, password, host, port):
@@ -207,7 +209,7 @@ case when transfer_euid is not null then 'Transfered' else 'New' end as flag,
 (transfer_amount)transfer_amount,
 date(usd.created_at) created_at, expiry_date,amount,plan_id
 from user_subscription_data usd 
-where  coalesce(tranferred_at,expiry_date) >= current_date
+where  coalesce(tranferred_at,expiry_date) >= current_date and id!=1952
 -- group by 1,2,3,4
 order by 3
 )a

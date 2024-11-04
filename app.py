@@ -348,7 +348,7 @@ pivoted_data_adacclevel = None
 # Calculate yesterday and day before yesterday's dates
 yesterday = (date.today() - timedelta(days=1))
 day_before_yst = (date.today() - timedelta(days=2))
-last_month = (date.today() - timedelta(days=30))
+last_month = date.today().replace(day=1) - timedelta(days=1)
 current_month = datetime.now().month
 current_year = datetime.now().year
 
@@ -433,7 +433,7 @@ if selected == "Key Account Stats" and st.session_state.status == "verified":
     # Filter data for yesterday and day before yesterday
     yesterday_data = filtered_df[filtered_df['dt'] == yesterday]
     day_before_yst_data = filtered_df[filtered_df['dt'] == day_before_yst]
-    last_month_df = filtered_df[filtered_df['dt'] == last_month]
+    last_month_df = filtered_df[(filtered_df['dt'] >= last_month.replace(day=1)) & (filtered_df['dt'] < last_month.replace(day=1) + timedelta(days=32))]
     
     
     # Calculate the total spend for each day
@@ -943,7 +943,7 @@ if selected == "Top accounts" and st.session_state.status == "verified":
                    .sort_values(by="spend", ascending=False).reset_index(drop=True)
 
     top_businesses = top_businesses[['euid', 'ad_account_id', 'ad_account_name', 'spend']]
-    
+
     # Display top 10 businesses
     st.header("Top 10 Businesses by Spend")
     st.write(f"Showing data from {start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')}")

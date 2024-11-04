@@ -247,7 +247,49 @@ where
 euid not in (701,39)
     '''
 
+list_query = '''
+SELECT distinct b.app_business_id as euid, a.ad_account_id, a.name as ad_account_name, b.name as business_manager_name,eu.business_name,eu.company_name
+FROM fb_ad_accounts a
+	LEFT JOIN fb_business_managers b ON b.id = a.app_business_manager_id
+   left join enterprise_users eu on b.app_business_id=eu.euid
+   order by 1 desc
+'''
 
+all_spends_query='''
+
+SELECT euid,dt,ad_account_id,ad_account_name,currency_code,case when currency_code = 'INR' then cast(spend as text)
+when currency_code='EUR' then cast(spend*1.09 as text)
+when currency_code='GBP' then cast(spend*1.3 as text)
+when currency_code='AUD' then cast(spend*0.66 as text)
+when currency_code='USD' then cast(spend as text) end as converted_spend,
+case when currency_code = 'INR' then 'INR'
+when currency_code='EUR' then 'USD'
+when currency_code='GBP' then 'USD'
+when currency_code='AUD' then 'USD'
+when currency_code='USD' then 'USD' end as converted_currency,
+spend as original_spend
+FROM
+(SELECT
+ a.euid,a.ad_account_id,ad_account_name,case when a.ad_account_id = 'act_507277141809499' then 'USD'
+when a.ad_account_id = 'act_1250764673028073' then 'USD'
+when efaa.flag is null then 'INR' 
+else efaa.flag end as currency_code,date_start as dt, spend
+    from  ad_account_spends a 
+left join 
+        (
+            SELECT ad_account_id,ad_account_name,currency as flag
+            FROM
+            (
+            select ad_account_id,ad_account_name,fb_user_id,row_number() over(partition by ad_account_id order by fb_user_id) as rank,currency
+            from 
+            (select * from enterprise_facebook_ad_account
+            where status='true')a
+            )a
+            where rank=1 
+        ) efaa
+    on concat('act_',efaa.ad_account_id)= a.ad_account_id
+)
+'''
 
 
 @st.cache_data(ttl=86400)  # 86400 seconds = 24 hours
@@ -262,7 +304,8 @@ def execute_query(connection, cursor,query):
 
 df = execute_query(query=query)
 sub_df = execute_query(query=sub_query)
-
+list_df = execute_query(query=list_query)
+spends_df = execute_query(query=all_spends_query)
 
 #chaning proper format of date
 df['dt'] = pd.to_datetime(df['dt']).dt.date
@@ -290,8 +333,18 @@ sub_df['expected_util'] = pd.to_numeric(sub_df['expected_util'], errors='coerce'
 sub_df['overall_util'] = pd.to_numeric(sub_df['overall_util'], errors='coerce')
 sub_df['rw'] = pd.to_numeric(sub_df['rw'], errors='coerce')
 
+#adspends query
+spends_df['dt'] = pd.to_datetime(spends_df['dt'])
+
+
+# Drop the currency_code column and rename columns as required
+spends_df = spends_df.drop(columns=['currency_code'])
+spends_df = spends_df.rename(columns={"converted_currency": "currency", "converted_spend": "spend"})
+spends_df['spend'] = pd.to_numeric(spends_df['spend'], errors='coerce')
+
 grouped_data_adacclevel = None
 pivoted_data_adacclevel = None
+
 # Calculate yesterday and day before yesterday's dates
 yesterday = (date.today() - timedelta(days=1))
 day_before_yst = (date.today() - timedelta(days=2))
@@ -306,8 +359,8 @@ df = df[df['dt'] != date.today()]
 with st.sidebar:
     selected = option_menu(
         menu_title="Navigation",  # Required
-        options=["Login","Key Account Stats", "Raw Data","Overall Stats - Ind","Overall Stats - US","Revenue-Analysis"],  # Required
-        icons=["lock","airplane-engines", "table","currency-rupee",'currency-dollar','cash-coin'],  # Optional: icons from the Bootstrap library
+        options=["Login","Key Account Stats", "Raw Data","Overall Stats - Ind","Overall Stats - US","Revenue-Analysis","Euid - adaccount mapping","Top accounts"],  # Required
+        icons=["lock","airplane-engines", "table","currency-rupee",'currency-dollar','cash-coin','link',"graph-up"],  # Optional: icons from the Bootstrap library
         menu_icon="cast",  # Optional: main menu icon
         default_index=0,  # Default active menu item
     )
@@ -827,3 +880,71 @@ if selected == "Revenue-Analysis" and st.session_state.status == "verified":
     st.subheader("Upcoming Renewals")
     st.metric("Number of Accounts", upcoming_renewals.shape[0])
     st.dataframe(upcoming_renewals)
+
+
+if selected == "Euid - adaccount mapping" and st.session_state.status == "verified":
+
+    st.title("Euid - adaccount mapping")
+    st.dataframe(list_df, use_container_width=True)
+
+    euid = st.number_input("Type an euid")
+
+    filtered_list_df = list_df[list_df['euid'] == euid]
+    st.dataframe(filtered_list_df, use_container_width=True)
+
+if selected == "Top accounts" and st.session_state.status == "verified":
+        
+    
+    # Streamlit App
+    st.title("Top 10 Businesses by Spend")
+
+    # Currency Filter
+    currency_option = st.selectbox("Select Currency", ["All", "INR", "USD"])
+    if currency_option != "All":
+        filtered_df = spends_df[spends_df['currency'] == currency_option]
+    else:
+        filtered_df = spends_df
+
+    # Date Range Selection
+    time_frame = st.selectbox("Select Time Frame", ["Last 30 Days", "Last 90 Days", "Overall", "Custom Date Range"])
+
+    #Top Numbers
+    n = st.number_input("Number of records to display", min_value=1, value=10)
+
+    if time_frame == "Last 30 Days":
+        start_date = datetime.now() - timedelta(days=30)
+        end_date = datetime.now()
+    elif time_frame == "Last 90 Days":
+        start_date = datetime.now() - timedelta(days=90)
+        end_date = datetime.now()
+    elif time_frame == "Overall":
+        start_date = filtered_df['dt'].min()
+        end_date = filtered_df['dt'].max()
+    else:  # Custom Date Range
+        start_date = st.date_input("Start Date", value=datetime.now() - timedelta(days=30))
+        end_date = st.date_input("End Date", value=datetime.now())
+
+    # Filter DataFrame by selected date range
+    filtered_df = filtered_df[(filtered_df['dt'] >= pd.to_datetime(start_date)) & (filtered_df['dt'] <= pd.to_datetime(end_date))]
+
+    # Aggregate spend per business and get the top 10
+    top_spenders = (
+        filtered_df.groupby([ "ad_account_id"])["spend"]
+        .sum()
+        .reset_index()
+        .sort_values(by="spend", ascending=False)
+        .head(n)
+    )
+
+    filtered_df = filtered_df[['euid', 'ad_account_id', 'ad_account_name']]
+
+    top_businesses = pd.merge(top_spenders, filtered_df, on="ad_account_id", how="left") \
+                   .drop_duplicates(subset="ad_account_id") \
+                   .sort_values(by="spend", ascending=False).reset_index(drop=True)
+
+    top_businesses = top_businesses[['euid', 'ad_account_id', 'ad_account_name', 'spend']]
+    
+    # Display top 10 businesses
+    st.header("Top 10 Businesses by Spend")
+    st.write(f"Showing data from {start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')}")
+    st.dataframe(top_businesses, use_container_width=True)

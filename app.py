@@ -167,85 +167,85 @@ from enterprise_users eu
 
 
 
-sub_query = '''
-SELECT * FROM
-(
-SELECT euid,ad_account_id,ad_account_name,sub_start, sub_end, 
-currency, plan_amount,plan_limit,flag,total_subscription_days, subscription_days_completed,adspends_added,
-ROUND(expected_per_day_spend, 2) AS expected_per_day_spend,
-ROUND(expected_per_day_spend * subscription_days_completed, 2) AS expected_TD_spend,
-adspends_added AS actual_TD_spend,
--- round((cast(subscription_days_completed as float)/ total_subscription_days)*100,2) AS expected_TD_util,
-case when subscription_days_completed =0 then 0 else ROUND((adspends_added / (expected_per_day_spend * subscription_days_completed)) * 100, 2) end AS actual_TD_util,
-case when subscription_days_completed =0 then 0 else ROUND(((expected_per_day_spend * subscription_days_completed) / plan_limit) * 100, 2) end AS expected_util,
-ROUND((adspends_added / plan_limit) * 100, 2) AS overall_util
-,row_number() over(partition by ad_account_id ORDER by sub_start desc) as rw
+# sub_query = '''
+# SELECT * FROM
+# (
+# SELECT euid,ad_account_id,ad_account_name,sub_start, sub_end, 
+# currency, plan_amount,plan_limit,flag,total_subscription_days, subscription_days_completed,adspends_added,
+# ROUND(expected_per_day_spend, 2) AS expected_per_day_spend,
+# ROUND(expected_per_day_spend * subscription_days_completed, 2) AS expected_TD_spend,
+# adspends_added AS actual_TD_spend,
+# -- round((cast(subscription_days_completed as float)/ total_subscription_days)*100,2) AS expected_TD_util,
+# case when subscription_days_completed =0 then 0 else ROUND((adspends_added / (expected_per_day_spend * subscription_days_completed)) * 100, 2) end AS actual_TD_util,
+# case when subscription_days_completed =0 then 0 else ROUND(((expected_per_day_spend * subscription_days_completed) / plan_limit) * 100, 2) end AS expected_util,
+# ROUND((adspends_added / plan_limit) * 100, 2) AS overall_util
+# ,row_number() over(partition by ad_account_id ORDER by sub_start desc) as rw
 
-FROM
-(
-SELECT  euid,ad_account_id,ad_account_name,created_at as sub_start,expiry_date as sub_end, 
-currency, plan_amount,plan_limit,flag,
-datediff('day',sub_start,expiry_date) as total_subscription_days,
-(datediff('day',sub_start,current_date)) as subscription_days_completed,
-(plan_limit/datediff('day',sub_start,expiry_date)) as expected_per_day_spend,
-(adspend_added+transfer_amount) as adspends_added
-FROM
-(
-SELECT  a.euid,a.ad_account_id,ad_account_name,a.created_at,a.expiry_date, currency,
-usd_amount as plan_amount,
-case when currency='INR' then price_range else usd_price_range end as plan_limit,transfer_amount,flag, sum(adspend_added) as adspend_added
+# FROM
+# (
+# SELECT  euid,ad_account_id,ad_account_name,created_at as sub_start,expiry_date as sub_end, 
+# currency, plan_amount,plan_limit,flag,
+# datediff('day',sub_start,expiry_date) as total_subscription_days,
+# (datediff('day',sub_start,current_date)) as subscription_days_completed,
+# (plan_limit/datediff('day',sub_start,expiry_date)) as expected_per_day_spend,
+# (adspend_added+transfer_amount) as adspends_added
+# FROM
+# (
+# SELECT  a.euid,a.ad_account_id,ad_account_name,a.created_at,a.expiry_date, currency,
+# usd_amount as plan_amount,
+# case when currency='INR' then price_range else usd_price_range end as plan_limit,transfer_amount,flag, sum(adspend_added) as adspend_added
 
-FROM
-(
-SELECT  a.euid,a.ad_account_id,a.created_at,a.expiry_date,a.amount as subamt,sp.plan_id,
- ad_account_name,
-coalesce(efaa.currency,faa.currency,'INR') as currency,
- sp.plan_name, sp.usd_amount,sp.usd_price_range,sp.price_range, transfer_amount,flag
-FROM
-(
-select distinct payment_id, euid, 
-case when ad_account_id = 'act_1735955147217127' then '1735955147217127' else ad_account_id end as ad_account_id,
-case when transfer_euid is not null then 'Transfered' else 'New' end as flag,
-(transfer_amount)transfer_amount,
-date(usd.created_at) created_at, expiry_date,amount,plan_id
-from user_subscription_data usd 
-where  coalesce(tranferred_at,expiry_date) >= current_date and id!=1952
--- group by 1,2,3,4
-order by 3
-)a
-left join 
-fb_ad_accounts faa on concat('act_',a.ad_account_id) = faa.ad_account_id
-left join 
-(
-SELECT ad_account_id,ad_account_name,currency
-FROM
-(
-select ad_account_id,ad_account_name,fb_user_id,row_number() over(partition by ad_account_id order by fb_user_id) as rank,currency
-from 
-(select * from enterprise_facebook_ad_account
-where status='true')a
-)a
-where rank=1 
-) efaa
-on a.ad_account_id = efaa.ad_account_id 
-left join subscription_plan sp on a.plan_id = sp.plan_id
-)a
-left JOIN
-(
-    SELECT euid,ad_account,date(payment_date) as payment_date,sum(adspend_amount) as adspend_added
-    from payment_trans_details
-    GROUP by 1,2,3
-) as adspends 
-on a.euid=adspends.euid and a.ad_account_id=adspends.ad_account and adspends.payment_date>=a.created_at
-group by 1,2,3,4,5,6,7,8,9,10
+# FROM
+# (
+# SELECT  a.euid,a.ad_account_id,a.created_at,a.expiry_date,a.amount as subamt,sp.plan_id,
+#  ad_account_name,
+# coalesce(efaa.currency,faa.currency,'INR') as currency,
+#  sp.plan_name, sp.usd_amount,sp.usd_price_range,sp.price_range, transfer_amount,flag
+# FROM
+# (
+# select distinct payment_id, euid, 
+# case when ad_account_id = 'act_1735955147217127' then '1735955147217127' else ad_account_id end as ad_account_id,
+# case when transfer_euid is not null then 'Transfered' else 'New' end as flag,
+# (transfer_amount)transfer_amount,
+# date(usd.created_at) created_at, expiry_date,amount,plan_id
+# from user_subscription_data usd 
+# where  coalesce(tranferred_at,expiry_date) >= current_date and id!=1952
+# -- group by 1,2,3,4
+# order by 3
+# )a
+# left join 
+# fb_ad_accounts faa on concat('act_',a.ad_account_id) = faa.ad_account_id
+# left join 
+# (
+# SELECT ad_account_id,ad_account_name,currency
+# FROM
+# (
+# select ad_account_id,ad_account_name,fb_user_id,row_number() over(partition by ad_account_id order by fb_user_id) as rank,currency
+# from 
+# (select * from enterprise_facebook_ad_account
+# where status='true')a
+# )a
+# where rank=1 
+# ) efaa
+# on a.ad_account_id = efaa.ad_account_id 
+# left join subscription_plan sp on a.plan_id = sp.plan_id
+# )a
+# left JOIN
+# (
+#     SELECT euid,ad_account,date(payment_date) as payment_date,sum(adspend_amount) as adspend_added
+#     from payment_trans_details
+#     GROUP by 1,2,3
+# ) as adspends 
+# on a.euid=adspends.euid and a.ad_account_id=adspends.ad_account and adspends.payment_date>=a.created_at
+# group by 1,2,3,4,5,6,7,8,9,10
 
-)
-order by 2
-)
-)
-where 
-euid not in (701,39)
-    '''
+# )
+# order by 2
+# )
+# )
+# where 
+# euid not in (701,39)
+#     '''
 
 list_query = '''
 SELECT distinct b.app_business_id as euid, a.ad_account_id, a.name as ad_account_name, b.name as business_manager_name,eu.business_name,eu.company_name
@@ -303,7 +303,7 @@ def execute_query(connection, cursor,query):
     return result
 
 df = execute_query(query=query)
-sub_df = execute_query(query=sub_query)
+# sub_df = execute_query(query=sub_query)
 list_df = execute_query(query=list_query)
 spends_df = execute_query(query=all_spends_query)
 
@@ -314,24 +314,24 @@ df['dt'] = pd.to_datetime(df['dt']).dt.date
 df['spend'] = pd.to_numeric(df['spend'], errors='coerce')
 df['euid'] = pd.to_numeric(df['euid'], errors='coerce')
 
-#Revenue analysis query
+# #Revenue analysis query
 
-sub_df['euid'] = pd.to_numeric(sub_df['euid'], errors='coerce')
-sub_df['plan_amount'] = pd.to_numeric(sub_df['plan_amount'], errors='coerce')
-# sub_df['ad_account_id'] = pd.to_numeric(sub_df['ad_account_id'], errors='coerce')
-sub_df['sub_start'] = pd.to_datetime(sub_df['sub_start']).dt.date
-sub_df['sub_end'] = pd.to_datetime(sub_df['sub_end']).dt.date
-sub_df['total_subscription_days'] = pd.to_numeric(sub_df['total_subscription_days'], errors='coerce')
-sub_df['subscription_days_completed'] = pd.to_numeric(sub_df['subscription_days_completed'], errors='coerce')
-sub_df['adspends_added'].fillna(0, inplace=True)
-sub_df['adspends_added'] = pd.to_numeric(sub_df['adspends_added'], errors='coerce')
-sub_df['expected_per_day_spend'] = pd.to_numeric(sub_df['expected_per_day_spend'], errors='coerce')
-sub_df['expected_td_spend'] = pd.to_numeric(sub_df['expected_td_spend'], errors='coerce')
-sub_df['actual_td_spend'] = pd.to_numeric(sub_df['actual_td_spend'], errors='coerce')
-sub_df['actual_td_util'] = pd.to_numeric(sub_df['actual_td_util'], errors='coerce')
-sub_df['expected_util'] = pd.to_numeric(sub_df['expected_util'], errors='coerce')
-sub_df['overall_util'] = pd.to_numeric(sub_df['overall_util'], errors='coerce')
-sub_df['rw'] = pd.to_numeric(sub_df['rw'], errors='coerce')
+# sub_df['euid'] = pd.to_numeric(sub_df['euid'], errors='coerce')
+# sub_df['plan_amount'] = pd.to_numeric(sub_df['plan_amount'], errors='coerce')
+# # sub_df['ad_account_id'] = pd.to_numeric(sub_df['ad_account_id'], errors='coerce')
+# sub_df['sub_start'] = pd.to_datetime(sub_df['sub_start']).dt.date
+# sub_df['sub_end'] = pd.to_datetime(sub_df['sub_end']).dt.date
+# sub_df['total_subscription_days'] = pd.to_numeric(sub_df['total_subscription_days'], errors='coerce')
+# sub_df['subscription_days_completed'] = pd.to_numeric(sub_df['subscription_days_completed'], errors='coerce')
+# sub_df['adspends_added'].fillna(0, inplace=True)
+# sub_df['adspends_added'] = pd.to_numeric(sub_df['adspends_added'], errors='coerce')
+# sub_df['expected_per_day_spend'] = pd.to_numeric(sub_df['expected_per_day_spend'], errors='coerce')
+# sub_df['expected_td_spend'] = pd.to_numeric(sub_df['expected_td_spend'], errors='coerce')
+# sub_df['actual_td_spend'] = pd.to_numeric(sub_df['actual_td_spend'], errors='coerce')
+# sub_df['actual_td_util'] = pd.to_numeric(sub_df['actual_td_util'], errors='coerce')
+# sub_df['expected_util'] = pd.to_numeric(sub_df['expected_util'], errors='coerce')
+# sub_df['overall_util'] = pd.to_numeric(sub_df['overall_util'], errors='coerce')
+# sub_df['rw'] = pd.to_numeric(sub_df['rw'], errors='coerce')
 
 #adspends query
 spends_df['dt'] = pd.to_datetime(spends_df['dt'])
@@ -809,77 +809,77 @@ elif selected == "Overall Stats - US" and st.session_state.status == "verified":
     st.line_chart(us_grouped_data, x='dt', y='spend_in_usd')
 
 
-if selected == "Revenue-Analysis" and st.session_state.status == "verified":
+# if selected == "Revenue-Analysis" and st.session_state.status == "verified":
 
-    st.dataframe(sub_df, use_container_width=True)
+#     st.dataframe(sub_df, use_container_width=True)
 
-    # Streamlit App
-    st.title("Ad Subscription Dashboard")
+#     # Streamlit App
+#     st.title("Ad Subscription Dashboard")
 
-    # Currency Filter
-    currency_option = st.selectbox("Select Currency", ["All", "India", "US"])
-    if currency_option == "India":
-        currency_filter = "INR"
-        filtered_df = sub_df[sub_df['currency'] == currency_filter].reset_index(drop=True)
-    elif currency_option == "US":
-        currency_filter = "INR"
-        filtered_df = sub_df[sub_df['currency'] != currency_filter]
-    else:
-        filtered_df = sub_df  # Show all data if "All" is selected
+#     # Currency Filter
+#     currency_option = st.selectbox("Select Currency", ["All", "India", "US"])
+#     if currency_option == "India":
+#         currency_filter = "INR"
+#         filtered_df = sub_df[sub_df['currency'] == currency_filter].reset_index(drop=True)
+#     elif currency_option == "US":
+#         currency_filter = "INR"
+#         filtered_df = sub_df[sub_df['currency'] != currency_filter]
+#     else:
+#         filtered_df = sub_df  # Show all data if "All" is selected
 
-    # Key Metrics Display
-    st.header("Key Metrics")
+#     # Key Metrics Display
+#     st.header("Key Metrics")
 
-    # Arrange key metrics in columns for better layout
-    col1, col2, col3, col4 = st.columns(4)
+#     # Arrange key metrics in columns for better layout
+#     col1, col2, col3, col4 = st.columns(4)
 
-    # Calculations for metrics
-    total_accounts = filtered_df['ad_account_id'].nunique()
-    total_subscription_amount = filtered_df['plan_amount'].sum()
-    avg_plan_amount = filtered_df['plan_amount'].mean()
-    avg_utilization = filtered_df['actual_td_util'].mean()
-    total_spend = filtered_df['actual_td_spend'].sum()
-    expected_spend = filtered_df['expected_td_spend'].sum()
+#     # Calculations for metrics
+#     total_accounts = filtered_df['ad_account_id'].nunique()
+#     total_subscription_amount = filtered_df['plan_amount'].sum()
+#     avg_plan_amount = filtered_df['plan_amount'].mean()
+#     avg_utilization = filtered_df['actual_td_util'].mean()
+#     total_spend = filtered_df['actual_td_spend'].sum()
+#     expected_spend = filtered_df['expected_td_spend'].sum()
 
-    # Display metrics in columns
-    col1.metric("Total Accounts", total_accounts)
-    col2.metric("Total Subscription Amount", f"{total_subscription_amount:,.2f} {currency_option}")
-    col3.metric("Average Plan Amount", f"{avg_plan_amount:,.2f} {currency_option}")
-    col4.metric("Average Utilization (%)", f"{avg_utilization:.2f}%")
+#     # Display metrics in columns
+#     col1.metric("Total Accounts", total_accounts)
+#     col2.metric("Total Subscription Amount", f"{total_subscription_amount:,.2f} {currency_option}")
+#     col3.metric("Average Plan Amount", f"{avg_plan_amount:,.2f} {currency_option}")
+#     col4.metric("Average Utilization (%)", f"{avg_utilization:.2f}%")
 
-    col1.metric("Total Spend", f"{total_spend:,.2f} {currency_option}")
-    col2.metric("Expected Spend", f"{expected_spend:,.2f} {currency_option}")
+#     col1.metric("Total Spend", f"{total_spend:,.2f} {currency_option}")
+#     col2.metric("Expected Spend", f"{expected_spend:,.2f} {currency_option}")
 
-    # Define filter categories
-    no_adspends = filtered_df[filtered_df['adspends_added'] == 0].reset_index(drop=True)
-    need_attention = filtered_df[filtered_df['actual_td_util'] < 30].reset_index(drop=True)
-    potential_upgrade = filtered_df[filtered_df['actual_td_util'] > 70].reset_index(drop=True)
-    upcoming_renewals = filtered_df[filtered_df['sub_end'] <= date.today() + timedelta(days=7)].reset_index(drop=True)
+#     # Define filter categories
+#     no_adspends = filtered_df[filtered_df['adspends_added'] == 0].reset_index(drop=True)
+#     need_attention = filtered_df[filtered_df['actual_td_util'] < 30].reset_index(drop=True)
+#     potential_upgrade = filtered_df[filtered_df['actual_td_util'] > 70].reset_index(drop=True)
+#     upcoming_renewals = filtered_df[filtered_df['sub_end'] <= date.today() + timedelta(days=7)].reset_index(drop=True)
 
-    #All the active accounts
-    st.subheader("Active Subscriptions")
-    st.metric("Number of Accounts", filtered_df.shape[0])
-    st.dataframe(filtered_df)
+#     #All the active accounts
+#     st.subheader("Active Subscriptions")
+#     st.metric("Number of Accounts", filtered_df.shape[0])
+#     st.dataframe(filtered_df)
 
-    # Display the number of accounts per category with metrics
-    st.header("Account Divisions")
+#     # Display the number of accounts per category with metrics
+#     st.header("Account Divisions")
 
-    # Categories metrics display
-    st.subheader("Subscription with No Adspends")
-    st.metric("Number of Accounts", no_adspends.shape[0])
-    st.dataframe(no_adspends)
+#     # Categories metrics display
+#     st.subheader("Subscription with No Adspends")
+#     st.metric("Number of Accounts", no_adspends.shape[0])
+#     st.dataframe(no_adspends)
 
-    st.subheader("Ad Accounts that Need Attention")
-    st.metric("Number of Accounts", need_attention.shape[0])
-    st.dataframe(need_attention)
+#     st.subheader("Ad Accounts that Need Attention")
+#     st.metric("Number of Accounts", need_attention.shape[0])
+#     st.dataframe(need_attention)
 
-    st.subheader("Potential Upgrades")
-    st.metric("Number of Accounts", potential_upgrade.shape[0])
-    st.dataframe(potential_upgrade)
+#     st.subheader("Potential Upgrades")
+#     st.metric("Number of Accounts", potential_upgrade.shape[0])
+#     st.dataframe(potential_upgrade)
 
-    st.subheader("Upcoming Renewals")
-    st.metric("Number of Accounts", upcoming_renewals.shape[0])
-    st.dataframe(upcoming_renewals)
+#     st.subheader("Upcoming Renewals")
+#     st.metric("Number of Accounts", upcoming_renewals.shape[0])
+#     st.dataframe(upcoming_renewals)
 
 
 if selected == "Euid - adaccount mapping" and st.session_state.status == "verified":

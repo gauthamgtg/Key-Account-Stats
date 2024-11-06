@@ -94,35 +94,49 @@ case when lower(eu.company_name) like '%datong%' or lower(eu.company_name) like 
         when eu.euid in (1911)then 'Adfly' 
         when eu.euid in  ( 527, 785, 1049, 1230, 1231) or a.ad_account_id ='act_797532865863232' then 'Eleganty'
         when a.ad_account_id in 
-        (
-        'act_3563973227209697',
-        'act_957109429531250',
-        'act_759315738654233',
-        'act_723792699245884',
-        'act_604278331059492',
-        'act_881404577110091',
-        'act_397827242568247',
-        'act_586902686585383',
-        'act_965249685184093',
-        'act_1306548849911815',
-        'act_565292762205849',
-        'act_281403371310608',
-        'act_2059544207742648',
-        'act_873580428253310',
-        'act_1097129248477609',
-        'act_308308454982919',
-        'act_427844130047005',
-        'act_1653390585242405',
-        'act_1860659564374272',
-        'act_1292987141870282',
-        'act_1068783194317542',
-        'act_216902994241137',
-        'act_6915108528593741',
-        'act_881404577110091',
-        'act_1237873617243932',
-        'act_571119348702020',
-        'act_789733129886592'
-        ) and dt>='2024-10-01' then 'Roposo'
+        ('act_3563973227209697',
+    'act_397827242568247',
+    'act_957109429531250',
+    'act_723792699245884',
+    'act_759315738654233',
+    'act_1100595954813761',
+    'act_1077926824004942',
+    'act_1733494130732206',
+    'act_741576947416981',
+    'act_586902686585383',
+    'act_2059544207742648',
+    'act_604278331059492',
+    'act_722518396265984',
+    'act_1708627536373549',
+    'act_870986978485811',
+    'act_965249685184093',
+    'act_281403371310608',
+    'act_1306548849911815',
+    'act_565292762205849',
+    'act_873580428253310',
+    'act_6915108528593741',
+    'act_1058565595757779',
+    'act_1068783194317542',
+    'act_24221841557403126',
+    'act_767160144989024',
+    'act_225215876674518',
+    'act_1097129248477609',
+    'act_308308454982919',
+    'act_1653390585242405',
+    'act_571119348702020',
+    'act_1239769893841877',
+    'act_427844130047005',
+    'act_1237873617243932',
+    'act_789733129886592',
+    'act_881404577110091',
+    'act_1860659564374272',
+    'act_1292987141870282',
+    'act_1068783194317542',
+    'act_583622110895013',
+    'act_216902994241137',
+    'act_417067534179569',
+    'act_589022446887185'
+        ) and dt>='2024-10-01' and a.euid not in ('461.0', '744.0','468.0','788.0','1165.0','1186.0') then 'Roposo'
         else 'Others' end as top_customers_flag
 from enterprise_users eu
     left join (
@@ -156,7 +170,7 @@ from enterprise_users eu
             select ad_account_id,ad_account_name,fb_user_id,row_number() over(partition by ad_account_id order by fb_user_id) as rank,currency
             from 
             (select * from enterprise_facebook_ad_account
-            where status='true')a
+            )a
             )a
             where rank=1 
         ) efaa
@@ -223,7 +237,7 @@ from enterprise_users eu
 # select ad_account_id,ad_account_name,fb_user_id,row_number() over(partition by ad_account_id order by fb_user_id) as rank,currency
 # from 
 # (select * from enterprise_facebook_ad_account
-# where status='true')a
+# )a
 # )a
 # where rank=1 
 # ) efaa
@@ -283,7 +297,7 @@ left join
             select ad_account_id,ad_account_name,fb_user_id,row_number() over(partition by ad_account_id order by fb_user_id) as rank,currency
             from 
             (select * from enterprise_facebook_ad_account
-            where status='true')a
+            )a
             )a
             where rank=1 
         ) efaa
@@ -291,6 +305,19 @@ left join
 )
 '''
 
+ai_spends_query = '''
+select business_id,account_name,cs.ad_account_id,currency,date(date_start)dt,sum(spend)spend
+from zocket_global.fb_campaign_age_gender_metrics_v3 cs
+left join 
+(select ad_account_id,account_type,min(business_id)business_id 
+from zocket_global.fb_ad_accounts 
+GROUP by 1,2 )
+faa_ind 
+on cs.ad_account_id=faa_ind.ad_account_id
+where faa_ind.account_type ='ZOCKET'
+group by 1,2,3,4,5
+order by 3
+'''
 
 @st.cache_data(ttl=86400)  # 86400 seconds = 24 hours
 @redshift_connection(db,name,passw,server,port)
@@ -306,6 +333,7 @@ df = execute_query(query=query)
 # sub_df = execute_query(query=sub_query)
 list_df = execute_query(query=list_query)
 spends_df = execute_query(query=all_spends_query)
+ai_spends_df = execute_query(query=ai_spends_query)
 
 #chaning proper format of date
 df['dt'] = pd.to_datetime(df['dt']).dt.date
@@ -359,8 +387,8 @@ df = df[df['dt'] != date.today()]
 with st.sidebar:
     selected = option_menu(
         menu_title="Navigation",  # Required
-        options=["Login","Key Account Stats", "Raw Data","Overall Stats - Ind","Overall Stats - US","Revenue-Analysis","Euid - adaccount mapping","Top accounts"],  # Required
-        icons=["lock","airplane-engines", "table","currency-rupee",'currency-dollar','cash-coin','link',"graph-up"],  # Optional: icons from the Bootstrap library
+        options=["Login","Key Account Stats", "Raw Data","Overall Stats - Ind","Overall Stats - US","Revenue-Analysis","Euid - adaccount mapping","Top accounts","AI account spends"],  # Required
+        icons=["lock","airplane-engines", "table","currency-rupee",'currency-dollar','cash-coin','link',"graph-up","robot"],  # Optional: icons from the Bootstrap library
         menu_icon="cast",  # Optional: main menu icon
         default_index=0,  # Default active menu item
     )
@@ -948,3 +976,61 @@ if selected == "Top accounts" and st.session_state.status == "verified":
     st.header("Top 10 Businesses by Spend")
     st.write(f"Showing data from {start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')}")
     st.dataframe(top_businesses, use_container_width=True)
+
+if selected == "AI account spends" and st.session_state.status == "verified":
+
+    grouping = st.selectbox('Choose Grouping', ['Year', 'Month', 'Week', 'Date'], index=1)
+
+    ai_spends_df['dt'] = pd.to_datetime(ai_spends_df['dt'])
+
+    # Streamlit app
+    st.title("AI Spend Dashboard")
+
+    # User option to select time frame
+    # time_frame = st.selectbox("Select Time Frame", ["Day", "Week", "Month", "Year"])
+
+    # Today's and yesterday's dates for calculating metrics
+    today = datetime.now().date()
+    yesterday = today - timedelta(days=1)
+
+       # Assuming your 'dt' column is already in date format (e.g., YYYY-MM-DD)
+    if grouping == 'Year':
+        ai_spends_df.loc[:, 'grouped_date'] = ai_spends_df['dt'].apply(lambda x: x.strftime('%Y'))  # Year format as 2024
+    elif grouping == 'Month':
+        ai_spends_df.loc[:, 'grouped_date'] = ai_spends_df['dt'].apply(lambda x: x.strftime('%b-%y'))  # Month format as Jan-24
+    elif grouping == 'Week':
+        ai_spends_df.loc[:, 'grouped_date'] = ai_spends_df['dt'].apply(lambda x: f"{x.strftime('%Y')} - week {x.isocalendar()[1]}")  # Week format as 2024 - week 24
+    else:
+        ai_spends_df.loc[:, 'grouped_date'] = ai_spends_df['dt']  # Just use the date as is (in date format)
+
+    # Aggregate the spend values by the selected grouping
+    grouped_df = ai_spends_df.groupby(['business_id','account_name','ad_account_id','currency','grouped_date'])['spend'].sum().reset_index()
+    # Metrics Calculation
+    # Today's Spend
+    today_spend = ai_spends_df[ai_spends_df['dt'].dt.date == today]['spend'].sum()
+    # Yesterday's Spend
+    yesterday_spend = ai_spends_df[ai_spends_df['dt'].dt.date == yesterday]['spend'].sum()
+    # Spend Change from Yesterday
+    spend_change = ((today_spend - yesterday_spend) / yesterday_spend * 100) if yesterday_spend != 0 else 0
+    # Current Month Spend
+    current_month_spend = ai_spends_df[ai_spends_df['dt'].dt.to_period("M") == today.strftime("%Y-%m")]['spend'].sum()
+    # Last Month Spend
+    last_month = (today.replace(day=1) - timedelta(days=1)).strftime("%Y-%m")
+    last_month_spend = ai_spends_df[ai_spends_df['dt'].dt.to_period("M") == last_month]['spend'].sum()
+    # Number of Active Ad Accounts
+    active_ad_accounts = ai_spends_df['ad_account_id'].nunique()
+
+    # Display Metrics
+    st.metric("Today's Spend", f"${today_spend:,.2f}")
+    st.metric("Change from Yesterday", f"{spend_change:.2f}%")
+    st.metric("Current Month Spend", f"${current_month_spend:,.2f}")
+    st.metric("Last Month Spend", f"${last_month_spend:,.2f}")
+    st.metric("Active Ad Accounts", active_ad_accounts)
+
+    # Display grouped data
+    st.header(f"Spend Data - {grouping} View")
+    st.dataframe(grouped_df)
+
+    # Display full table
+    st.header("Full Table")
+    st.dataframe(ai_spends_df, use_container_width=True)

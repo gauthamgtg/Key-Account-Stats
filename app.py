@@ -319,23 +319,34 @@ group by 1,2,3,4,5
 order by 3
 '''
 
-zocket_ai_campaigns_spends_query = '''
-select
-    date(date_start) as dt,
-    fcaa.business_id,
-    gc.campaign_name,
-    SUM(ggci.spend)spend,
-    ggci.ad_account_id,
-    ggci.currency,
-    ggci.account_name
-FROM
- zocket_global.fb_campaigns gc 
-    join zocket_global.fb_campaign_age_gender_metrics_v3 ggci on gc.campaign_id = ggci.campaign_id 
-    left join zocket_global.fb_ad_accounts fcaa on ggci.ad_account_id= fcaa.ad_account_id
-where date(date_start)>='2024-09-01'
-group by
-1,2,3,5,6,7
+#fb campaigns level query
+# zocket_ai_campaigns_spends_query = '''
+# select
+#     date(date_start) as dt,
+#     fcaa.business_id,
+#     gc.campaign_name,
+#     SUM(ggci.spend)spend,
+#     ggci.ad_account_id,
+#     ggci.currency,
+#     ggci.account_name
+# FROM
+#  zocket_global.fb_campaigns gc 
+#     join zocket_global.fb_campaign_age_gender_metrics_v3 ggci on gc.campaign_id = ggci.campaign_id 
+#     left join zocket_global.fb_ad_accounts fcaa on ggci.ad_account_id= fcaa.ad_account_id
+# where date(date_start)>='2024-09-01'
+# group by
+# 1,2,3,5,6,7
 
+# '''
+
+#adlevel query
+zocket_ai_campaigns_spends_query='''
+select faagmv.ad_account_id,faagmv.currency, date(date_start) as dt,account_name,SUM(faagmv.spend)spend
+from zocket_global.fb_ads_age_gender_metrics_v3 faagmv
+inner join zocket_global.fb_ads fa on faagmv.ad_id = fa.ad_id
+-- left join zocket_global.fb_campaigns fc on gc.campaign_id=ggci.cam
+where date(date_start)>='2024-09-01'
+group by 1,2,3,4
 '''
 
 @st.cache_data(ttl=86400)  # 86400 seconds = 24 hours
@@ -691,7 +702,7 @@ elif selected == "Overall Stats - Ind" and st.session_state.status == "verified"
     col2.metric("Ad Accounts", ind_num_ad_accounts_yesterday, f"{ind_ad_account_change}%")
 
     # Metric 3: Average Spend per Ad Account and change %
-    col3.metric("Avg Spend per Ad Account", f"₹{round(ind_avg_spend_per_account_yesterday, 2)}", f"{avg_ind_spend_change}%")
+    col3.metric("Avg Spend per Ad Account yesterday", f"₹{round(ind_avg_spend_per_account_yesterday, 2)}", f"{avg_ind_spend_change}%")
 
     # Display the current month spend as a metric
     col4.metric(label="Current Month Spend", value=f"₹{ind_current_month_spend:,.2f}")
@@ -833,7 +844,7 @@ elif selected == "Overall Stats - US" and st.session_state.status == "verified":
     col2.metric("Ad Accounts", us_num_ad_accounts_yesterday, f"{us_ad_account_change}%")
 
     # Metric 3: Average Spend per Ad Account and change %
-    col3.metric("Avg Spend per Ad Account", f"${round(us_avg_spend_per_account_yesterday, 2)}", f"{us_avg_spend_change}%")
+    col3.metric("Avg Spend per Ad Account yesterday", f"${round(us_avg_spend_per_account_yesterday, 2)}", f"{us_avg_spend_change}%")
 
     # Display the current month spend as a metric
     col4.metric(label="Current Month Spend (in USD)", value=f"${total_current_month_spend:,.2f}")
@@ -1144,8 +1155,6 @@ if selected == "FB API Campaign spends" and st.session_state.status == "verified
 
     ai_campaign_spends_df['dt'] = pd.to_datetime(ai_campaign_spends_df['dt'])
 
-    ai_campaign_spends_df = ai_campaign_spends_df[(ai_campaign_spends_df['dt'] >= pd.to_datetime(start_date)) & (ai_campaign_spends_df['dt'] <= pd.to_datetime(end_date))]
-
 
     # bp.id,
     # SUM(ggci.spend),
@@ -1170,8 +1179,6 @@ if selected == "FB API Campaign spends" and st.session_state.status == "verified
     else:
         ai_campaign_spends_df.loc[:, 'grouped_date'] = ai_campaign_spends_df['dt']  # Just use the date as is (in date format)
 
-    # Aggregate the spend values by the selected grouping
-    grouped_df = ai_campaign_spends_df.groupby(['ad_account_id','account_name','currency','grouped_date'])['spend'].sum().reset_index()
     # Metrics Calculation
     # Today's Spend
             # if currency_option == "IND BM":
@@ -1181,11 +1188,15 @@ if selected == "FB API Campaign spends" and st.session_state.status == "verified
             # else:
             #     today_spend = ai_campaign_spends_df[ai_campaign_spends_df['dt'].dt.date == today]['spend_in_inr'].sum() 
     today_spend = ai_campaign_spends_df[ai_campaign_spends_df['dt'].dt.date == today]['spend_in_usd'].sum() 
+    Overall_spend = ai_campaign_spends_df['spend_in_usd'].sum() 
 
     # Yesterday's Spend
     yesterday_spend = ai_campaign_spends_df[ai_campaign_spends_df['dt'].dt.date == yesterday]['spend_in_usd'].sum()
+    day_before_yesterday_spend = ai_campaign_spends_df[ai_campaign_spends_df['dt'].dt.date == day_before_yst]['spend_in_usd'].sum()
+
     # Spend Change from Yesterday
-    # spend_change = ((today_spend - yesterday_spend) / yesterday_spend * 100) if yesterday_spend != 0 else 0
+    tdy_spend_change = ((today_spend - yesterday_spend) / yesterday_spend * 100) if yesterday_spend != 0 else 0
+    spend_change = ((yesterday_spend - day_before_yesterday_spend) / day_before_yesterday_spend * 100) if day_before_yesterday_spend != 0 else 0
     # Current Month Spend
     current_month_spend = ai_campaign_spends_df[ai_campaign_spends_df['dt'].dt.to_period("M") == today.strftime("%Y-%m")]['spend_in_usd'].sum()
     # Last Month Spend
@@ -1194,13 +1205,44 @@ if selected == "FB API Campaign spends" and st.session_state.status == "verified
     # Number of Active Ad Accounts
     active_ad_accounts = ai_campaign_spends_df['ad_account_id'].nunique()
 
+     # Get today's date to identify the current and last month
+    today = datetime.now().date()
+    current_month_period = today.strftime("%Y-%m")  # e.g., "2024-10"
+    last_month_period = (today.replace(day=1) - timedelta(days=1)).strftime("%Y-%m")  # Previous month in "YYYY-MM" format
+
+    # Filter for current month
+    current_month_data = ai_campaign_spends_df[ai_campaign_spends_df['dt'].dt.to_period("M") == current_month_period]
+    # Filter for last month
+    last_month_data = ai_campaign_spends_df[ai_campaign_spends_df['dt'].dt.to_period("M") == last_month_period]
+
+    # Calculate average spend per account for the current month
+    total_spend_current_month = current_month_data['spend_in_usd'].sum()
+    unique_accounts_current_month = current_month_data['ad_account_id'].nunique()
+    avg_spend_current_month = total_spend_current_month / unique_accounts_current_month if unique_accounts_current_month > 0 else 0
+
+    # Calculate average spend per account for the last month
+    total_spend_last_month = last_month_data['spend_in_usd'].sum()
+    unique_accounts_last_month = last_month_data['ad_account_id'].nunique()
+    avg_spend_last_month = total_spend_last_month / unique_accounts_last_month if unique_accounts_last_month > 0 else 0
+
+    # Calculate percentage change in average spend per account from last month to current month
+    average_spend_change = ((avg_spend_current_month - avg_spend_last_month) / avg_spend_last_month * 100) if avg_spend_last_month > 0 else None
+    
     # Display Metrics
-    col1.metric("Today's Spend", f"${today_spend:,.2f}")
-    col2.metric("Yesterday Spend", f"${yesterday_spend:.2f}")
+    col1.metric("Today's Spend", f"${today_spend:,.2f}",f"{tdy_spend_change:,.2f}%")
+    # col1.metric("Overall Spend", f"${Overall_spend:,.2f}")
+    col2.metric("Yesterday Spend", f"${yesterday_spend:.2f}",f"{spend_change:,.2f}%")
     col1.metric("Current Month Spend", f"${current_month_spend:,.2f}")
     col2.metric("Last Month Spend", f"${last_month_spend:,.2f}")
+    col1.metric("Average Spend per Account - Current Month", f"${avg_spend_current_month:,.2f}",f"{average_spend_change:.2f}%" if average_spend_change is not None else "N/A")
+    col2.metric("Average Spend per Account - Last Month", f"${avg_spend_last_month:,.2f}")
     # col2.metric("Active Ad Accounts", active_ad_accounts)
 
+    ai_campaign_spends_df = ai_campaign_spends_df[(ai_campaign_spends_df['dt'] >= pd.to_datetime(start_date)) & (ai_campaign_spends_df['dt'] <= pd.to_datetime(end_date))]
+
+    # Aggregate the spend values by the selected grouping
+    grouped_df = ai_campaign_spends_df.groupby(['ad_account_id','account_name','currency','grouped_date'])['spend'].sum().reset_index()
+   
     # Display grouped data
     st.header(f"Spend Data Ad Account Level- {grouping}")
     pivot_df = grouped_df.pivot(index=['account_name','ad_account_id','currency'], columns='grouped_date', values='spend')
@@ -1218,21 +1260,23 @@ if selected == "FB API Campaign spends" and st.session_state.status == "verified
     st.dataframe(pivot_df, use_container_width=True) 
     
     # Display full table
-    st.header("Campaign Level Data")   
+    # st.header("Campaign Level Data")   
     
-    grouped_camp_df = ai_campaign_spends_df.groupby(['ad_account_id','account_name','currency','campaign_name','grouped_date'])['spend'].sum().reset_index()
-    pivot_camp_df = grouped_camp_df.pivot(index=['account_name','ad_account_id','currency','campaign_name'], columns='grouped_date', values='spend')
+    # grouped_camp_df = ai_campaign_spends_df.groupby(['ad_account_id','account_name','currency','campaign_name','grouped_date'])['spend'].sum().reset_index()
+    # pivot_camp_df = grouped_camp_df.pivot(index=['account_name','ad_account_id','currency','campaign_name'], columns='grouped_date', values='spend')
 
-    st.dataframe(pivot_camp_df, use_container_width=True)
+    # st.dataframe(pivot_camp_df, use_container_width=True)
 
-    # Display full table in USD
-    st.header("Campaign Level Data - USD")   
+    # # Display full table in USD
+    # st.header("Campaign Level Data - USD")   
     
-    grouped_camp_df = ai_campaign_spends_df.groupby(['ad_account_id','account_name','campaign_name','grouped_date'])['spend_in_usd'].sum().reset_index()
-    pivot_camp_df = grouped_camp_df.pivot(index=['account_name','ad_account_id','campaign_name'], columns='grouped_date', values='spend_in_usd')
+    # grouped_camp_df = ai_campaign_spends_df.groupby(['ad_account_id','account_name','campaign_name','grouped_date'])['spend_in_usd'].sum().reset_index()
+    # pivot_camp_df = grouped_camp_df.pivot(index=['account_name','ad_account_id','campaign_name'], columns='grouped_date', values='spend_in_usd')
 
-    st.dataframe(pivot_camp_df, use_container_width=True)
+    # st.dataframe(pivot_camp_df, use_container_width=True)
     
     # Display full table
     st.header("Full Table")
     st.dataframe(ai_campaign_spends_df, use_container_width=True)
+
+   

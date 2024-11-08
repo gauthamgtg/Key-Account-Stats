@@ -345,8 +345,52 @@ select faagmv.ad_account_id,faagmv.currency, date(date_start) as dt,account_name
 from zocket_global.fb_ads_age_gender_metrics_v3 faagmv
 inner join zocket_global.fb_ads fa on faagmv.ad_id = fa.ad_id
 -- left join zocket_global.fb_campaigns fc on gc.campaign_id=ggci.cam
-where date(date_start)>='2024-09-01'
+where date(date_start)>='2024-01-01'
 group by 1,2,3,4
+'''
+
+disabled_account_query='''
+SELECT euid,ad_account_id,
+case when flag = 'Reactivated' then reactivation_date
+when flag = 'Disabled' then dt end as disable_date,
+case when flag = 'Reactivated' then dt end as reactivation_date
+,flag
+,coalesce(currency,ef_currency) as currency
+,coalesce(name,ef_ad_account_name) as ad_account_name
+FROM
+(
+SELECT *,case when rw = 1 and prev_status !=1 and account_status = 1 then 'Reactivated' 
+            when rw = 1 and account_status != 1 then 'Disabled' else 'Others'
+            end as flag, case when rw = 1 and prev_status !=1 and account_status = 1 then prev_dt end as reactivation_date
+
+FROM
+(
+select eu.euid,b.name,a.ad_account_id,a.account_status,dateadd('minute',330,a.created_at) as dt,b.currency,
+d.currency as ef_currency,d.ad_account_name as ef_ad_account_name,
+ row_number() over(partition by a.ad_account_id order by a.created_at desc) as rw,
+ lag(a.account_status,1) over(PARTITION by a.ad_account_id order by dateadd('minute',330,a.created_at)) as prev_status,
+ lag(dateadd('minute',330,a.created_at),1) over(PARTITION by a.ad_account_id order by dateadd('minute',330,a.created_at)) as prev_dt
+-- from "dev"."public"."ad_account_webhook" a
+from "dev"."z_b"."ad_account_webhook" a
+left join fb_ad_accounts b on a.ad_account_id = b.ad_account_id
+left join fb_business_managers c on c.id = b.app_business_manager_id
+left join enterprise_users eu on c.app_business_id=eu.euid
+left join (
+SELECT ad_account_id,ad_account_name,currency
+FROM
+(
+select ad_account_id,ad_account_name,fb_user_id,row_number() over(partition by ad_account_id order by fb_user_id) as rank,currency
+from 
+(select * from enterprise_facebook_ad_account
+where status='true')a
+)a
+where rank=1 
+) d
+on a.ad_account_id = concat('act_',d.ad_account_id)
+order by 3
+)
+)
+where flag !='Others'
 '''
 
 @st.cache_data(ttl=86400)  # 86400 seconds = 24 hours
@@ -365,6 +409,7 @@ list_df = execute_query(query=list_query)
 spends_df = execute_query(query=all_spends_query)
 ai_spends_df = execute_query(query=ai_spends_query)
 ai_campaign_spends_df = execute_query(query=zocket_ai_campaigns_spends_query)
+disabled_account_df = execute_query(query=disabled_account_query)
 
 #chaning proper format of date
 df['dt'] = pd.to_datetime(df['dt']).dt.date
@@ -418,8 +463,8 @@ df = df[df['dt'] != date.today()]
 with st.sidebar:
     selected = option_menu(
         menu_title="Navigation",  # Required
-        options=["Login","Key Account Stats", "Raw Data","Overall Stats - Ind","Overall Stats - US","Revenue-Analysis","Euid - adaccount mapping","Top accounts","AI account spends","FB API Campaign spends"],  # Required
-        icons=["lock","airplane-engines", "table","currency-rupee",'currency-dollar','cash-coin','link',"graph-up","robot","suit-spade"],  # Optional: icons from the Bootstrap library
+        options=["Login","Key Account Stats", "Raw Data","Overall Stats - Ind","Overall Stats - US","Revenue-Analysis","Euid - adaccount mapping","Top accounts","AI account spends","FB API Campaign spends","Disabled Ad Accounts"],  # Required
+        icons=["lock","airplane-engines", "table","currency-rupee",'currency-dollar','cash-coin','link',"graph-up","robot","suit-spade","slash-circle"],  # Optional: icons from the Bootstrap library
         menu_icon="cast",  # Optional: main menu icon
         default_index=0,  # Default active menu item
     )
@@ -1012,17 +1057,19 @@ if selected == "Top accounts" and st.session_state.status == "verified":
 
 if selected == "AI account spends" and st.session_state.status == "verified":
 
+    st.title("AI Spend Dashboard")
+
     grouping = st.selectbox('Choose Grouping', ['Year', 'Month', 'Week', 'Date'], index=1)
 
     ai_spends_df['dt'] = pd.to_datetime(ai_spends_df['dt'])
 
-    start_date = st.date_input("Start Date", value=datetime.now() - timedelta(days=30))
-    end_date = st.date_input("End Date", value=datetime.now())
+    col1,col2 = st.columns(2)
+    with col1:
+        start_date = st.date_input("Start Date", value=datetime(2024, 9, 1))
+    with col2:
+        end_date = st.date_input("End Date", value=datetime.now())
 
     ai_spends_df = ai_spends_df[(ai_spends_df['dt'] >= pd.to_datetime(start_date)) & (ai_spends_df['dt'] <= pd.to_datetime(end_date))]
-
-    # Streamlit app
-    st.title("AI Spend Dashboard")
 
     # User option to select time frame
     # time_frame = st.selectbox("Select Time Frame", ["Day", "Week", "Month", "Year"])
@@ -1058,16 +1105,21 @@ if selected == "AI account spends" and st.session_state.status == "verified":
     # Number of Active Ad Accounts
     active_ad_accounts = ai_spends_df['ad_account_id'].nunique()
 
+
+    col1, col2 = st.columns(2)
+    
     # Display Metrics
-    st.metric("Today's Spend", f"${today_spend:,.2f}")
+    col1.metric("Today's Spend", f"${today_spend:,.2f}")
     # st.metric("Change from Yesterday", f"{spend_change:.2f}%")
-    st.metric("Current Month Spend", f"${current_month_spend:,.2f}")
-    st.metric("Last Month Spend", f"${last_month_spend:,.2f}")
-    st.metric("Active Ad Accounts", active_ad_accounts)
+    col2.metric("Current Month Spend", f"${current_month_spend:,.2f}")
+    col1.metric("Last Month Spend", f"${last_month_spend:,.2f}")
+    col2.metric("Active Ad Accounts", active_ad_accounts)
 
     # Display grouped data
     st.header(f"Spend Data - {grouping} View")
-    st.dataframe(grouped_df)
+
+    pivoted_df = grouped_df.pivot(index=['business_id','account_name','ad_account_id','currency'], columns='grouped_date', values='spend')
+    st.dataframe(pivoted_df, use_container_width=True)
 
     # Display full table
     st.header("Full Table")
@@ -1111,12 +1163,22 @@ if selected == "FB API Campaign spends" and st.session_state.status == "verified
 
     # Predefine default values for specific currencies
     default_values = {
-                        'EUR': 1.1,
-                        'GBP': 1.3,
-                        'AUD': 0.75,
-                        'INR': 84.0,
+                        'EUR': 1.08,
+                        'GBP': 1.30,
+                        'AUD': 0.66,
+                        'INR': 0.012,
                         'THB': 0.029,
-                        'KRW': 0.00072
+                        'KRW': 0.00072,
+                        'CAD' : 0.72,
+                        'BRL' :0.18,
+                        'TRY':0.029,
+                        'VND':0.000040,
+                        'AED':0.27,
+                        'RON': 0.22,
+                        'ZAR':0.057,
+                        'NOK':0.092,
+                        'SAR':0.27,
+                        'MXN':0.050
                     }
 
     # Display input boxes for each unique currency code other than 'USD'
@@ -1137,19 +1199,19 @@ if selected == "FB API Campaign spends" and st.session_state.status == "verified
         if row['currency'] == 'USD':
             return row['spend']
         elif row['currency'] in conversion_rates:
-            return row['spend'] / conversion_rates[row['currency']]
-        return row['spend']
-    
-    def convert_to_inr(row):
-        if row['currency'] == 'INR':
-            return row['spend']
-        elif row['currency'] in conversion_rates:
             return row['spend'] * conversion_rates[row['currency']]
         return row['spend']
+    
+    # def convert_to_inr(row):
+    #     if row['currency'] == 'INR':
+    #         return row['spend']
+    #     elif row['currency'] in conversion_rates:
+    #         return row['spend_in_usd'] * conversion_rates[row['currency']]
+    #     return row['spend']
 
     # Create the 'spend_in_usd' column
     ai_campaign_spends_df['spend_in_usd'] = ai_campaign_spends_df.apply(lambda row: convert_to_usd(row), axis=1)
-    ai_campaign_spends_df['spend_in_inr'] = ai_campaign_spends_df.apply(lambda row: convert_to_inr(row), axis=1)
+    # ai_campaign_spends_df['spend_in_inr'] = ai_campaign_spends_df.apply(lambda row: convert_to_inr(row), axis=1)
 
     
 
@@ -1229,8 +1291,9 @@ if selected == "FB API Campaign spends" and st.session_state.status == "verified
     average_spend_change = ((avg_spend_current_month - avg_spend_last_month) / avg_spend_last_month * 100) if avg_spend_last_month > 0 else None
     
     # Display Metrics
-    col1.metric("Today's Spend", f"${today_spend:,.2f}",f"{tdy_spend_change:,.2f}%")
-    # col1.metric("Overall Spend", f"${Overall_spend:,.2f}")
+    col1.metric("Overall Spend (YTD)", f"${Overall_spend:,.2f}")
+    # col1.metric("Today's Spend", f"${today_spend:,.2f}",f"{tdy_spend_change:,.2f}%")
+    
     col2.metric("Yesterday Spend", f"${yesterday_spend:.2f}",f"{spend_change:,.2f}%")
     col1.metric("Current Month Spend", f"${current_month_spend:,.2f}")
     col2.metric("Last Month Spend", f"${last_month_spend:,.2f}")
@@ -1280,3 +1343,22 @@ if selected == "FB API Campaign spends" and st.session_state.status == "verified
     st.dataframe(ai_campaign_spends_df, use_container_width=True)
 
    
+if selected == "Disabled Ad Accounts" and st.session_state.status == "verified":
+
+    st.title("Disabled/Reactivated Ad Accounts Dashboard")
+
+    disabled_account_df = disabled_account_df.sort_values(by='disable_date', ascending=False)
+
+    # st.dataframe(disabled_account_df, use_container_width=True)
+
+    flag = st.selectbox("Select Disabled/Reactived", ("Disabled", "Reactivated"))
+
+    st.title(f"{flag} Ad Accounts")
+
+    if flag == "Disabled":
+        disabled_account_df = disabled_account_df[disabled_account_df['flag'] == 'Disabled']
+        disabled_account_df = disabled_account_df.loc[:, disabled_account_df.columns != 'reactivation_date']
+    else:
+        disabled_account_df = disabled_account_df[disabled_account_df['flag'] == 'Reactivated']
+
+    st.dataframe(disabled_account_df, use_container_width=True)

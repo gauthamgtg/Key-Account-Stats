@@ -319,6 +319,25 @@ group by 1,2,3,4,5
 order by 3
 '''
 
+zocket_ai_campaigns_spends_query = '''
+select
+    date(date_start) as dt,
+    fcaa.business_id,
+    gc.campaign_name,
+    SUM(ggci.spend)spend,
+    ggci.ad_account_id,
+    ggci.currency,
+    ggci.account_name
+FROM
+ zocket_global.fb_campaigns gc 
+    join zocket_global.fb_campaign_age_gender_metrics_v3 ggci on gc.campaign_id = ggci.campaign_id 
+    left join zocket_global.fb_ad_accounts fcaa on ggci.ad_account_id= fcaa.ad_account_id
+where date(date_start)>='2024-09-01'
+group by
+1,2,3,5,6,7
+
+'''
+
 @st.cache_data(ttl=86400)  # 86400 seconds = 24 hours
 @redshift_connection(db,name,passw,server,port)
 def execute_query(connection, cursor,query):
@@ -334,6 +353,7 @@ df = execute_query(query=query)
 list_df = execute_query(query=list_query)
 spends_df = execute_query(query=all_spends_query)
 ai_spends_df = execute_query(query=ai_spends_query)
+ai_campaign_spends_df = execute_query(query=zocket_ai_campaigns_spends_query)
 
 #chaning proper format of date
 df['dt'] = pd.to_datetime(df['dt']).dt.date
@@ -387,8 +407,8 @@ df = df[df['dt'] != date.today()]
 with st.sidebar:
     selected = option_menu(
         menu_title="Navigation",  # Required
-        options=["Login","Key Account Stats", "Raw Data","Overall Stats - Ind","Overall Stats - US","Revenue-Analysis","Euid - adaccount mapping","Top accounts","AI account spends"],  # Required
-        icons=["lock","airplane-engines", "table","currency-rupee",'currency-dollar','cash-coin','link',"graph-up","robot"],  # Optional: icons from the Bootstrap library
+        options=["Login","Key Account Stats", "Raw Data","Overall Stats - Ind","Overall Stats - US","Revenue-Analysis","Euid - adaccount mapping","Top accounts","AI account spends","FB API Campaign spends"],  # Required
+        icons=["lock","airplane-engines", "table","currency-rupee",'currency-dollar','cash-coin','link',"graph-up","robot","suit-spade"],  # Optional: icons from the Bootstrap library
         menu_icon="cast",  # Optional: main menu icon
         default_index=0,  # Default active menu item
     )
@@ -541,10 +561,12 @@ if selected == "Key Account Stats" and st.session_state.status == "verified":
     # st.dataframe(yesterday_data, use_container_width=True)
     
     # Aggregate the spend values by the selected grouping
-    grouped_data_adacclevel = filtered_df.groupby(['euid','ad_account_id','grouped_date'])['spend'].sum().reset_index()
-    pivoted_data_adacclevel = grouped_data_adacclevel.pivot(columns='grouped_date', index=['euid','ad_account_id'], values='spend')
+    grouped_data_adacclevel = filtered_df.groupby(['euid','ad_account_id','ad_account_name','grouped_date'])['spend'].sum().reset_index()
+    pivoted_data_adacclevel = grouped_data_adacclevel.pivot(columns='grouped_date', index=['euid','ad_account_id','ad_account_name'], values='spend')
     pivoted_data_adacclevels = grouped_data_adacclevel.pivot(index='grouped_date', columns=['ad_account_id'], values='spend')
     # st.dataframe(grouped_data_adacclevel, use_container_width=True)
+
+
     st.dataframe(pivoted_data_adacclevel, use_container_width=True)
 
     if 'show_transposedd' not in st.session_state:
@@ -983,6 +1005,11 @@ if selected == "AI account spends" and st.session_state.status == "verified":
 
     ai_spends_df['dt'] = pd.to_datetime(ai_spends_df['dt'])
 
+    start_date = st.date_input("Start Date", value=datetime.now() - timedelta(days=30))
+    end_date = st.date_input("End Date", value=datetime.now())
+
+    ai_spends_df = ai_spends_df[(ai_spends_df['dt'] >= pd.to_datetime(start_date)) & (ai_spends_df['dt'] <= pd.to_datetime(end_date))]
+
     # Streamlit app
     st.title("AI Spend Dashboard")
 
@@ -1022,7 +1049,7 @@ if selected == "AI account spends" and st.session_state.status == "verified":
 
     # Display Metrics
     st.metric("Today's Spend", f"${today_spend:,.2f}")
-    st.metric("Change from Yesterday", f"{spend_change:.2f}%")
+    # st.metric("Change from Yesterday", f"{spend_change:.2f}%")
     st.metric("Current Month Spend", f"${current_month_spend:,.2f}")
     st.metric("Last Month Spend", f"${last_month_spend:,.2f}")
     st.metric("Active Ad Accounts", active_ad_accounts)
@@ -1034,3 +1061,178 @@ if selected == "AI account spends" and st.session_state.status == "verified":
     # Display full table
     st.header("Full Table")
     st.dataframe(ai_spends_df, use_container_width=True)
+
+
+if selected == "FB API Campaign spends" and st.session_state.status == "verified":
+
+    st.title("FB API Campaign Spend Dashboard")
+
+    ai_campaign_spends_df['spend'] = pd.to_numeric(ai_campaign_spends_df['spend'], errors='coerce')
+
+    #Arrange key metrics in columns for better layout
+    col1, col2 = st.columns(2)
+
+    with col1:
+
+    # Currency Filter
+        currency_option = st.selectbox("Select BM", ["All", "IND BM", "US BM"], index=0)
+
+        start_date = st.date_input("Start Date", value=datetime(2024, 9, 1))
+    
+    if currency_option == "IND BM":
+        ai_campaign_spends_df = ai_campaign_spends_df[ai_campaign_spends_df['currency'] == "INR"]
+    if currency_option == "US BM":
+        ai_campaign_spends_df = ai_campaign_spends_df[ai_campaign_spends_df['currency'] != "INR"]
+    else:
+        ai_campaign_spends_df = ai_campaign_spends_df
+
+    with col2:
+
+        grouping = st.selectbox('Choose Grouping', ['Year', 'Month', 'Week', 'Date'], index=1)
+
+        end_date = st.date_input("End Date", value=datetime.now())
+
+    non_usd_currencies = ai_campaign_spends_df['currency'].unique()
+    non_usd_currencies = [currency for currency in non_usd_currencies if currency != 'USD']
+
+       # Create a dictionary to store the conversion rates entered by the user
+    conversion_rates = {}
+
+    # Predefine default values for specific currencies
+    default_values = {
+                        'EUR': 1.1,
+                        'GBP': 1.3,
+                        'AUD': 0.75,
+                        'INR': 84.0,
+                        'THB': 0.029,
+                        'KRW': 0.00072
+                    }
+
+    # Display input boxes for each unique currency code other than 'USD'
+    st.write("Enter conversion rates for the following currencies:")
+   
+    # Create columns dynamically based on the number of currencies
+    cols = st.columns(3)  # Adjust the number of columns (3 in this case)
+
+    # Iterate over non-USD currencies and display them in columns
+    for idx, currency in enumerate(non_usd_currencies):
+        default_value = default_values.get(currency, 1.0)  # Use default value if defined, otherwise 1.0
+        with cols[idx % 3]:  # Rotate through the columns
+            conversion_rates[currency] = st.number_input(
+                f"{currency} to USD:", value=default_value, min_value=0.0, step=0.001, format="%.3f"
+            )
+
+    def convert_to_usd(row):
+        if row['currency'] == 'USD':
+            return row['spend']
+        elif row['currency'] in conversion_rates:
+            return row['spend'] / conversion_rates[row['currency']]
+        return row['spend']
+    
+    def convert_to_inr(row):
+        if row['currency'] == 'INR':
+            return row['spend']
+        elif row['currency'] in conversion_rates:
+            return row['spend'] * conversion_rates[row['currency']]
+        return row['spend']
+
+    # Create the 'spend_in_usd' column
+    ai_campaign_spends_df['spend_in_usd'] = ai_campaign_spends_df.apply(lambda row: convert_to_usd(row), axis=1)
+    ai_campaign_spends_df['spend_in_inr'] = ai_campaign_spends_df.apply(lambda row: convert_to_inr(row), axis=1)
+
+    
+
+    ai_campaign_spends_df['dt'] = pd.to_datetime(ai_campaign_spends_df['dt'])
+
+    ai_campaign_spends_df = ai_campaign_spends_df[(ai_campaign_spends_df['dt'] >= pd.to_datetime(start_date)) & (ai_campaign_spends_df['dt'] <= pd.to_datetime(end_date))]
+
+
+    # bp.id,
+    # SUM(ggci.spend),
+    # ggci.ad_account_id,
+    # ggci.currency,
+    # ggci.account_name
+
+    # User option to select time frame
+    # time_frame = st.selectbox("Select Time Frame", ["Day", "Week", "Month", "Year"])
+
+    # Today's and yesterday's dates for calculating metrics
+    today = datetime.now().date()
+    yesterday = today - timedelta(days=1)
+
+       # Assuming your 'dt' column is already in date format (e.g., YYYY-MM-DD)
+    if grouping == 'Year':
+        ai_campaign_spends_df.loc[:, 'grouped_date'] = ai_campaign_spends_df['dt'].apply(lambda x: x.strftime('%Y'))  # Year format as 2024
+    elif grouping == 'Month':
+        ai_campaign_spends_df.loc[:, 'grouped_date'] = ai_campaign_spends_df['dt'].apply(lambda x: x.strftime('%b-%y'))  # Month format as Jan-24
+    elif grouping == 'Week':
+        ai_campaign_spends_df.loc[:, 'grouped_date'] = ai_campaign_spends_df['dt'].apply(lambda x: f"{x.strftime('%Y')} - week {x.isocalendar()[1]}")  # Week format as 2024 - week 24
+    else:
+        ai_campaign_spends_df.loc[:, 'grouped_date'] = ai_campaign_spends_df['dt']  # Just use the date as is (in date format)
+
+    # Aggregate the spend values by the selected grouping
+    grouped_df = ai_campaign_spends_df.groupby(['ad_account_id','account_name','currency','grouped_date'])['spend'].sum().reset_index()
+    # Metrics Calculation
+    # Today's Spend
+            # if currency_option == "IND BM":
+            #     today_spend = ai_campaign_spends_df[ai_campaign_spends_df['dt'].dt.date == today]['spend'].sum()
+            # if currency_option == "US BM":
+            #     today_spend = ai_campaign_spends_df[ai_campaign_spends_df['dt'].dt.date == today]['spend_in_usd'].sum()
+            # else:
+            #     today_spend = ai_campaign_spends_df[ai_campaign_spends_df['dt'].dt.date == today]['spend_in_inr'].sum() 
+    today_spend = ai_campaign_spends_df[ai_campaign_spends_df['dt'].dt.date == today]['spend_in_usd'].sum() 
+
+    # Yesterday's Spend
+    yesterday_spend = ai_campaign_spends_df[ai_campaign_spends_df['dt'].dt.date == yesterday]['spend_in_usd'].sum()
+    # Spend Change from Yesterday
+    # spend_change = ((today_spend - yesterday_spend) / yesterday_spend * 100) if yesterday_spend != 0 else 0
+    # Current Month Spend
+    current_month_spend = ai_campaign_spends_df[ai_campaign_spends_df['dt'].dt.to_period("M") == today.strftime("%Y-%m")]['spend_in_usd'].sum()
+    # Last Month Spend
+    last_month = (today.replace(day=1) - timedelta(days=1)).strftime("%Y-%m")
+    last_month_spend = ai_campaign_spends_df[ai_campaign_spends_df['dt'].dt.to_period("M") == last_month]['spend_in_usd'].sum()
+    # Number of Active Ad Accounts
+    active_ad_accounts = ai_campaign_spends_df['ad_account_id'].nunique()
+
+    # Display Metrics
+    col1.metric("Today's Spend", f"${today_spend:,.2f}")
+    col2.metric("Yesterday Spend", f"${yesterday_spend:.2f}")
+    col1.metric("Current Month Spend", f"${current_month_spend:,.2f}")
+    col2.metric("Last Month Spend", f"${last_month_spend:,.2f}")
+    # col2.metric("Active Ad Accounts", active_ad_accounts)
+
+    # Display grouped data
+    st.header(f"Spend Data Ad Account Level- {grouping}")
+    pivot_df = grouped_df.pivot(index=['account_name','ad_account_id','currency'], columns='grouped_date', values='spend')
+
+    # st.dataframe(grouped_df, use_container_width=True)
+    st.dataframe(pivot_df, use_container_width=True)
+
+   
+    # Display grouped data
+    st.header(f"Spend Data Ad Account Level - {grouping} USD View")
+    usd_grouped_df = ai_campaign_spends_df.groupby(['ad_account_id','account_name','grouped_date'])['spend_in_usd'].sum().reset_index()
+    pivot_df = usd_grouped_df.pivot(index=['account_name','ad_account_id'], columns='grouped_date', values='spend_in_usd')
+
+    # st.dataframe(grouped_df, use_container_width=True)
+    st.dataframe(pivot_df, use_container_width=True) 
+    
+    # Display full table
+    st.header("Campaign Level Data")   
+    
+    grouped_camp_df = ai_campaign_spends_df.groupby(['ad_account_id','account_name','currency','campaign_name','grouped_date'])['spend'].sum().reset_index()
+    pivot_camp_df = grouped_camp_df.pivot(index=['account_name','ad_account_id','currency','campaign_name'], columns='grouped_date', values='spend')
+
+    st.dataframe(pivot_camp_df, use_container_width=True)
+
+    # Display full table in USD
+    st.header("Campaign Level Data - USD")   
+    
+    grouped_camp_df = ai_campaign_spends_df.groupby(['ad_account_id','account_name','campaign_name','grouped_date'])['spend_in_usd'].sum().reset_index()
+    pivot_camp_df = grouped_camp_df.pivot(index=['account_name','ad_account_id','campaign_name'], columns='grouped_date', values='spend_in_usd')
+
+    st.dataframe(pivot_camp_df, use_container_width=True)
+    
+    # Display full table
+    st.header("Full Table")
+    st.dataframe(ai_campaign_spends_df, use_container_width=True)

@@ -338,18 +338,20 @@ LEFT join ad_account_spends a on a.ad_account_id=fba.ad_account_id
 
 
 ai_spends_query = '''
+
 SELECT
-business_id as euid,account_name as ad_account_name,cs.ad_account_id,currency as currency_code,bp.name as business_name,date(date_start)dt,sum(spend)spend
+business_id as euid,account_name as ad_account_name,cs.ad_account_id,currency as currency_code,bp.name as business_name,date(date_start)dt,b.name,sum(spend)spend
 from zocket_global.fb_campaign_age_gender_metrics_v3 cs
 left join 
-(select ad_account_id,account_type,min(business_id)business_id 
+(select ad_account_id,account_type,min(business_id)business_id , min(business_manager_id)business_manager_id
 from zocket_global.fb_ad_accounts 
-GROUP by 1,2 )
-faa_ind 
+GROUP by 1,2 ) faa_ind 
 on cs.ad_account_id=faa_ind.ad_account_id
 LEFT join zocket_global.business_profile bp on faa_ind.business_id=bp.id
+left join (SELECT name,business_manager_id from zocket_global.fb_child_business_managers) b 
+on faa_ind.business_manager_id = b.business_manager_id
 where faa_ind.account_type ='ZOCKET'
-group by 1,2,3,4,5,6
+group by 1,2,3,4,5,6,7
 order by 3
 '''
 
@@ -376,7 +378,7 @@ order by 3
 #adlevel query
 zocket_ai_campaigns_spends_query='''
 select
-ggci.ad_account_id,ggci.currency, date(date_start) as dt,account_name,SUM(ggci.spend)spend
+ggci.ad_account_id,ggci.currency,date(date_start) as dt,account_name,c.id as campaign_id,c.name as campaign_name,SUM(ggci.spend)spend
 FROM
     zocket_global.campaigns c
     join zocket_global.fb_campaigns gc on gc.app_campaign_id = c.id 
@@ -385,18 +387,35 @@ FROM
     join zocket_global.fb_ads_age_gender_metrics_v3 ggci on ggci.ad_id = fbads.ad_id
 where date(date_start)>='2024-01-01'
 and c.product_id is not null
-group by 1,2,3,4
+group by 1,2,3,4,5,6
 '''
 
 #disabled account query
 disabled_account_query='''
+
 SELECT euid,ad_account_id,
 case when flag = 'Reactivated' then reactivation_date
 when flag = 'Disabled' then dt end as disable_date,
 case when flag = 'Reactivated' then dt end as reactivation_date
 ,flag
-,coalesce(currency,ef_currency) as currency
-,coalesce(name,ef_ad_account_name) as ad_account_name
+,currency
+,name as ad_account_name,bm_name,
+case when disable_reason = 0 then 'NONE'
+when disable_reason = 1 then  'ADS_INTEGRITY_POLICY'
+when disable_reason = 2 then  'ADS_IP_REVIEW'
+when disable_reason = 3 then  'RISK_PAYMENT'
+when disable_reason = 4 then  'GRAY_ACCOUNT_SHUT_DOWN'
+when disable_reason = 5 then  'ADS_AFC_REVIEW'
+when disable_reason = 6 then  'BUSINESS_INTEGRITY_RAR'
+when disable_reason = 7 then  'PERMANENT_CLOSE'
+when disable_reason = 8 then  'UNUSED_RESELLER_ACCOUNT'
+when disable_reason = 9 then  'UNUSED_ACCOUNT'
+when disable_reason = 10 then  'UMBRELLA_AD_ACCOUNT'
+when disable_reason = 11 then  'BUSINESS_MANAGER_INTEGRITY_POLICY'
+when disable_reason = 12 then  'MISREPRESENTED_AD_ACCOUNT'
+when disable_reason = 13 then  'AOAB_DESHARE_LEGAL_ENTITY'
+when disable_reason = 14 then  'CTX_THREAD_REVIEW'
+when disable_reason = 15 then  'COMPROMISED_AD_ACCOUNT' end as disable_reason
 FROM
 (
 SELECT *,case when rw = 1 and prev_status !=1 and account_status = 1 then 'Reactivated' 
@@ -405,8 +424,8 @@ SELECT *,case when rw = 1 and prev_status !=1 and account_status = 1 then 'React
 
 FROM
 (
-select eu.euid,b.name,a.ad_account_id,a.account_status,dateadd('minute',330,a.created_at) as dt,b.currency,
-d.currency as ef_currency,d.ad_account_name as ef_ad_account_name,
+select eu.euid,b.name,a.ad_account_id,a.account_status,disable_reason,dateadd('minute',330,a.created_at) as dt,b.currency,
+b.currency as ef_currency,c.name as bm_name,
  row_number() over(partition by a.ad_account_id order by a.created_at desc) as rw,
  lag(a.account_status,1) over(PARTITION by a.ad_account_id order by dateadd('minute',330,a.created_at)) as prev_status,
  lag(dateadd('minute',330,a.created_at),1) over(PARTITION by a.ad_account_id order by dateadd('minute',330,a.created_at)) as prev_dt
@@ -415,18 +434,6 @@ from "dev"."z_b"."ad_account_webhook" a
 left join fb_ad_accounts b on a.ad_account_id = b.ad_account_id
 left join fb_business_managers c on c.id = b.app_business_manager_id
 left join enterprise_users eu on c.app_business_id=eu.euid
-left join (
-SELECT ad_account_id,ad_account_name,currency
-FROM
-(
-select ad_account_id,ad_account_name,fb_user_id,row_number() over(partition by ad_account_id order by fb_user_id) as rank,currency
-from 
-(select * from enterprise_facebook_ad_account
-where status='true')a
-)a
-where rank=1 
-) d
-on a.ad_account_id = concat('act_',d.ad_account_id)
 order by 3
 )
 )
@@ -495,6 +502,7 @@ datong_api_df = execute_query(query=datong_api_query)
 df['dt'] = pd.to_datetime(df['dt']).dt.date
 df['spend'] = pd.to_numeric(df['spend'], errors='coerce')
 df['euid'] = pd.to_numeric(df['euid'], errors='coerce')
+df =  df.fillna("Unknown")
 
 #Revenue analysis query
 
@@ -594,9 +602,9 @@ if selected == "Login":
 
 if selected == "Key Account Stats" and st.session_state.status == "verified":
 
-    ad_acc = st.text_input("Enter ad acc :")
+    # ad_acc = st.text_input("Enter ad acc :")
 
-    st.dataframe(df[df['ad_account_id'] == ad_acc], use_container_width=True)
+    # st.dataframe(df[df['ad_account_id'] == ad_acc], use_container_width=True)
 
     st.title("Key Account Stats")
     st.write("Show detailed spends of top customers.")
@@ -606,7 +614,7 @@ if selected == "Key Account Stats" and st.session_state.status == "verified":
     with col1:
     # Step 1: Ask the customer to choose a top_customers_flag
         flag_options = df['top_customers_flag'].unique()
-        selected_flag = st.selectbox('Choose Top Customers Flag', flag_options, index=2)
+        selected_flag = st.selectbox('Choose Top Customers Flag', flag_options, index=1)
 
     with col2:
 
@@ -616,7 +624,7 @@ if selected == "Key Account Stats" and st.session_state.status == "verified":
     # Filter the dataframe based on the selected top_customers_flag
     filtered_df = df[df['top_customers_flag'] == selected_flag]
 
-    st.dataframe(filtered_df, use_container_width=True)
+    # st.dataframe(filtered_df, use_container_width=True)
 
     col1, col2, col3 = st.columns(3)
     col1.metric("Total Spend",filtered_df['spend'].sum())
@@ -669,7 +677,44 @@ if selected == "Key Account Stats" and st.session_state.status == "verified":
     st.header(f"Spend Data Ad Account Level- {grouping}")
     grouped_df = filtered_df.groupby(['euid','ad_account_id','grouped_date'])[['spend']].sum().reset_index()
     pivot_df = grouped_df.pivot(index=['euid','ad_account_id'], columns='grouped_date', values='spend')
+    
     st.dataframe(pivot_df, use_container_width=True)
+
+
+    yst_stats_df = filtered_df[filtered_df['dt'] == yesterday].groupby(['euid','ad_account_id'])['spend'].sum().reset_index(drop=True)
+    current_month_stats_df = filtered_df[filtered_df['dt'].apply(lambda x: x.month == current_month and x.year == current_year)].groupby(['euid','ad_account_id'], as_index=False)['spend'].sum()
+    Overall_spend = filtered_df.groupby(['euid','ad_account_id'], as_index=False)['spend'].sum()
+
+    st.write("Yesterday spend data:")
+    st.dataframe(yst_stats_df, use_container_width=True)
+    
+    st.write("Current Month spend data:")
+    st.dataframe(current_month_stats_df, use_container_width=True)
+
+    st.write("Overall spend data:")
+    st.dataframe(Overall_spend, use_container_width=True)
+
+    summary_df = filtered_df
+    summary_df.loc[:, 'month'] = filtered_df['dt'].apply(lambda x: x.strftime('%b-%y'))  # Month format as Jan-24
+    # st.dataframe(summary_df, use_container_width=True)
+    # summary_df = summary_df.merge(yst_stats_df, on=['euid','ad_account_id'], how='left', suffixes=('', '_yesterday')).rename(columns={'spend':'yesterday_spend'})
+    # st.dataframe(summary_df, use_container_width=True)
+    summary_df = summary_df.merge(current_month_stats_df, on=['euid','ad_account_id'], how='left', suffixes=('', '_curr_month'))
+    summary_df = summary_df.fillna(0)
+    summary_df = summary_df.merge(Overall_spend, on=['euid','ad_account_id'], how='left', suffixes=('', '_total'))
+    summary_df = summary_df.fillna(0)
+    # print(summary_df.columns)
+    # st.dataframe(summary_df, use_container_width=True)
+    summary_df = summary_df.groupby(['euid','ad_account_id','business_name','company_name','month','spend_curr_month','spend_total'])['spend'].sum().reset_index()
+    summary_df = summary_df.pivot(index=['euid','ad_account_id','business_name','company_name','spend_total','spend_curr_month'], columns='month', values='spend')
+
+
+    # Sort the columns by date
+    summary_df = summary_df[sorted(summary_df.columns, key=lambda x: pd.to_datetime(x, format='%b-%y'), reverse=True)]
+
+    st.title("Spend Data Ad Account Level")
+    st.dataframe(summary_df, use_container_width=True)
+
 
     #display full table
 
@@ -700,6 +745,10 @@ elif selected == "Raw Data" and st.session_state.status == "verified":
         st.write(pivoted_data_adacclevel)  # Show original
 
     st.write(st.session_state['grouped_data_adacclevel'])
+
+    st.write("FBI API spends raw dump")
+
+    st.dataframe(ai_campaign_spends_df, use_container_width=True)
 
 
 elif selected == "Overall Stats - Ind" and st.session_state.status == "verified":
@@ -749,7 +798,7 @@ elif selected == "Overall Stats - Ind" and st.session_state.status == "verified"
     col1.metric("Yesterday Spend", f"₹{ind_yst_spend}", f"{ind_spend_change:,.2f}%")
 
     # Metric 2: Number of Ad Accounts and change %
-    col2.metric("Ad Accounts", ind_num_ad_accounts_yesterday, f"{ind_ad_account_change}%")
+    col2.metric("Active Ad Accounts Yesterday", ind_num_ad_accounts_yesterday, f"{ind_ad_account_change}%")
 
     # Metric 3: Average Spend per Ad Account and change %
     # col3.metric("Avg Spend per Ad Account yesterday", f"₹{round(ind_avg_spend_per_account_yesterday, 2)}", f"{avg_ind_spend_change}%")
@@ -791,7 +840,10 @@ elif selected == "Overall Stats - US" and st.session_state.status == "verified":
 
     us_df = pd.concat([us_df,ai_spends_df], ignore_index=True)
 
-    st.dataframe(us_df, use_container_width=True)
+    #remove duplicates
+    us_df = us_df.drop_duplicates(subset=['ad_account_id', 'dt'], keep='last')
+
+    # st.dataframe(us_df, use_container_width=True)
 
     # Identify unique currency codes other than 'USD'
     non_usd_currencies = us_df['currency_code'].unique()
@@ -881,8 +933,9 @@ elif selected == "Overall Stats - US" and st.session_state.status == "verified":
     
 
     st.write("Current Month spend data:")
-    us_grouped_data_adacclevel = us_current_month_df.groupby([pd.to_datetime(us_current_month_df['dt']).dt.strftime('%b %y'), 'euid','ad_account_id','ad_account_name','currency_code'])['spend'].sum().reset_index(name='spend').sort_values(by='spend', ascending=False).reset_index(drop=True)
+    us_grouped_data_adacclevel = us_current_month_df.groupby([pd.to_datetime(us_current_month_df['dt']).dt.strftime('%b %y'), 'euid', 'ad_account_id', 'ad_account_name', 'currency_code'])[['spend_in_usd', 'spend']].sum().sort_values(ascending=False).reset_index()
     us_grouped_data_adacclevel.index += 1
+    st.dataframe(us_grouped_data_adacclevel, use_container_width=True)
 
     st.write("Current Month spend data:")
     st.dataframe(us_current_month_df, use_container_width=True)
@@ -1085,13 +1138,13 @@ elif selected == "Top accounts" and st.session_state.status == "verified":
         .head(n)
     )
 
-    filtered_df = filtered_df[['euid', 'ad_account_id', 'ad_account_name']]
+    filtered_df = filtered_df[['euid', 'ad_account_id', 'ad_account_name','business_manager_name']]
 
     top_businesses = pd.merge(top_spenders, filtered_df, on="ad_account_id", how="left") \
                    .drop_duplicates(subset="ad_account_id") \
                    .sort_values(by="spend", ascending=False).reset_index(drop=True)
 
-    top_businesses = top_businesses[['euid', 'ad_account_id', 'ad_account_name', 'spend']]
+    top_businesses = top_businesses[['euid', 'ad_account_id', 'ad_account_name','business_manager_name', 'spend']]
 
     # Display top 10 businesses
     st.header("Top 10 Businesses by Spend")
@@ -1133,7 +1186,7 @@ elif selected == "AI account spends" and st.session_state.status == "verified":
         ai_spends_df.loc[:, 'grouped_date'] = ai_spends_df['dt']  # Just use the date as is (in date format)
 
     # Aggregate the spend values by the selected grouping
-    grouped_df = ai_spends_df.groupby(['ad_account_name','ad_account_id','currency_code','grouped_date'])['spend'].sum().reset_index()
+    grouped_df = ai_spends_df.groupby(['ad_account_name','ad_account_id','currency_code','grouped_date','name'])['spend'].sum().reset_index()
     # Metrics Calculation
     # Today's Spend
     today_spend = ai_spends_df[ai_spends_df['dt'].dt.date == today]['spend'].sum()
@@ -1162,7 +1215,7 @@ elif selected == "AI account spends" and st.session_state.status == "verified":
     # Display grouped data
     st.header(f"Spend Data - {grouping} View")
 
-    pivoted_df = grouped_df.pivot(index=['ad_account_name','ad_account_id','currency_code'], columns='grouped_date', values='spend')
+    pivoted_df = grouped_df.pivot(index=['ad_account_name','ad_account_id','currency_code','name'], columns='grouped_date', values='spend')
     st.dataframe(pivoted_df, use_container_width=True)
 
     # Display full table
@@ -1360,10 +1413,56 @@ elif selected == "FB API Campaign spends" and st.session_state.status == "verifi
     st.header("Full Table")
     st.dataframe(ai_campaign_spends_df, use_container_width=True)
 
+
+    st.header("Campaign Level Data")
+
+    # Aggregate the spend values by the selected grouping
+    grouped_df = ai_campaign_spends_df.groupby(['ad_account_id','account_name','campaign_name','currency','grouped_date'])['spend'].sum().reset_index()
+   
+    # Display grouped data
+    st.header(f"Spend Data Campaign Level- {grouping}")
+    pivot_df = grouped_df.pivot(index=['account_name','ad_account_id','campaign_name','currency'], columns='grouped_date', values='spend')
+
+    # st.dataframe(grouped_df, use_container_width=True)
+    st.dataframe(pivot_df, use_container_width=True)
+
+    # Display grouped data
+    st.header(f"Spend Data Campaign Level - {grouping} USD View")
+    usd_grouped_df = ai_campaign_spends_df.groupby(['ad_account_id','account_name','campaign_name','grouped_date'])['spend_in_usd'].sum().reset_index()
+    usd_pivot_df = usd_grouped_df.pivot(index=['account_name','ad_account_id','campaign_name'], columns='grouped_date', values='spend_in_usd')
+
+    st.dataframe(usd_pivot_df, use_container_width=True)
+
    
 elif selected == "Disabled Ad Accounts" and st.session_state.status == "verified":
 
     st.title("Disabled/Reactivated Ad Accounts Dashboard")
+
+    col1,col2,col3,col4 = st.columns(4)
+
+    today = date.today()
+    current_month_period = today.strftime("%Y-%m")
+    last_month_period = pd.to_datetime(today).to_period("M") - 1
+
+    # Ad Metrics
+    today_reactivated_accounts = disabled_account_df[(disabled_account_df['disable_date'].dt.date == today) & (disabled_account_df['flag'] == 'Reactivated')].shape[0]
+    yesterday_reactivated_accounts = disabled_account_df[(disabled_account_df['disable_date'].dt.date == yesterday) & (disabled_account_df['flag'] == 'Reactivated')].shape[0]
+    current_month_reactivated_accounts = disabled_account_df[(disabled_account_df['disable_date'].dt.to_period("M") == current_month_period) & (disabled_account_df['flag'] == 'Reactivated')].shape[0]
+    last_month_reactivated_accounts = disabled_account_df[(disabled_account_df['disable_date'].dt.to_period("M") == last_month_period) & (disabled_account_df['flag'] == 'Reactivated')].shape[0]
+    today_disabled_accounts = disabled_account_df[(disabled_account_df['disable_date'].dt.date == today) & (disabled_account_df['flag'] == 'Disabled')].shape[0]
+    yesterday_disabled_accounts = disabled_account_df[(disabled_account_df['disable_date'].dt.date == yesterday) & (disabled_account_df['flag'] == 'Disabled')].shape[0]
+    current_month_disabled_accounts = disabled_account_df[(disabled_account_df['disable_date'].dt.to_period("M") == current_month_period) & (disabled_account_df['flag'] == 'Disabled')].shape[0]
+    last_month_disabled_accounts = disabled_account_df[(disabled_account_df['disable_date'].dt.to_period("M") == last_month_period) & (disabled_account_df['flag'] == 'Disabled')].shape[0]
+
+    col1.metric("Total Reactivated Ad Accounts Today", today_reactivated_accounts)
+    col2.metric("Total Reactivated Ad Accounts Yesterday", yesterday_reactivated_accounts)
+    col3.metric("Total Reactivated Ad Accounts Current Month", current_month_reactivated_accounts)
+    col4.metric("Total Reactivated Ad Accounts Last Month", last_month_reactivated_accounts)
+    col1.metric("Total Disabled Ad Accounts Today", today_disabled_accounts)
+    col2.metric("Total Disabled Ad Accounts Yesterday", yesterday_disabled_accounts)
+    col3.metric("Total Disabled Ad Accounts Current Month", current_month_disabled_accounts)
+    col4.metric("Total Disabled Ad Accounts Last Month", last_month_disabled_accounts)
+    
 
     disabled_account_df = disabled_account_df.sort_values(by='disable_date', ascending=False)
 

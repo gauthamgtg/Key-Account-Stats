@@ -386,13 +386,12 @@ FROM
     join zocket_global.fb_ads fbads on fbadset.id = fbads.adset_id
     join zocket_global.fb_ads_age_gender_metrics_v3 ggci on ggci.ad_id = fbads.ad_id
 where date(date_start)>='2024-01-01'
-and c.product_id is not null
+and c.imported_at is null
 group by 1,2,3,4,5,6
 '''
 
 #disabled account query
 disabled_account_query='''
-
 SELECT euid,ad_account_id,
 case when flag = 'Reactivated' then reactivation_date
 when flag = 'Disabled' then dt end as disable_date,
@@ -424,8 +423,9 @@ SELECT *,case when rw = 1 and prev_status !=1 and account_status = 1 then 'React
 
 FROM
 (
-select eu.euid,b.name,a.ad_account_id,a.account_status,disable_reason,dateadd('minute',330,a.created_at) as dt,b.currency,
-b.currency as ef_currency,c.name as bm_name,
+select eu.euid,COALESCE(b.name,d.name)as name,a.ad_account_id,a.account_status,disable_reason,dateadd('minute',330,a.created_at) as dt,
+COALESCE(b.currency,d.currency)as currency,
+COALESCE(c.name,e.name)as bm_name,
  row_number() over(partition by a.ad_account_id order by a.created_at desc) as rw,
  lag(a.account_status,1) over(PARTITION by a.ad_account_id order by dateadd('minute',330,a.created_at)) as prev_status,
  lag(dateadd('minute',330,a.created_at),1) over(PARTITION by a.ad_account_id order by dateadd('minute',330,a.created_at)) as prev_dt
@@ -433,6 +433,8 @@ b.currency as ef_currency,c.name as bm_name,
 from "dev"."z_b"."ad_account_webhook" a
 left join fb_ad_accounts b on a.ad_account_id = b.ad_account_id
 left join fb_business_managers c on c.id = b.app_business_manager_id
+left join z_b.fb_ad_accounts d on a.ad_account_id = d.ad_account_id
+left join z_b.fb_business_managers e on e.id = d.app_business_manager_id
 left join enterprise_users eu on c.app_business_id=eu.euid
 order by 3
 )
@@ -1453,16 +1455,18 @@ elif selected == "Disabled Ad Accounts" and st.session_state.status == "verified
     yesterday_disabled_accounts = disabled_account_df[(disabled_account_df['disable_date'].dt.date == yesterday) & (disabled_account_df['flag'] == 'Disabled')].shape[0]
     current_month_disabled_accounts = disabled_account_df[(disabled_account_df['disable_date'].dt.to_period("M") == current_month_period) & (disabled_account_df['flag'] == 'Disabled')].shape[0]
     last_month_disabled_accounts = disabled_account_df[(disabled_account_df['disable_date'].dt.to_period("M") == last_month_period) & (disabled_account_df['flag'] == 'Disabled')].shape[0]
-
-    col1.metric("Total Reactivated Ad Accounts Today", today_reactivated_accounts)
-    col2.metric("Total Reactivated Ad Accounts Yesterday", yesterday_reactivated_accounts)
-    col3.metric("Total Reactivated Ad Accounts Current Month", current_month_reactivated_accounts)
-    col4.metric("Total Reactivated Ad Accounts Last Month", last_month_reactivated_accounts)
+    
+    
     col1.metric("Total Disabled Ad Accounts Today", today_disabled_accounts)
     col2.metric("Total Disabled Ad Accounts Yesterday", yesterday_disabled_accounts)
     col3.metric("Total Disabled Ad Accounts Current Month", current_month_disabled_accounts)
     col4.metric("Total Disabled Ad Accounts Last Month", last_month_disabled_accounts)
     
+    col1.metric("Total Reactivated Ad Accounts Today", today_reactivated_accounts)
+    col2.metric("Total Reactivated Ad Accounts Yesterday", yesterday_reactivated_accounts)
+    col3.metric("Total Reactivated Ad Accounts Current Month", current_month_reactivated_accounts)
+    col4.metric("Total Reactivated Ad Accounts Last Month", last_month_reactivated_accounts)
+
 
     disabled_account_df = disabled_account_df.sort_values(by='disable_date', ascending=False)
 

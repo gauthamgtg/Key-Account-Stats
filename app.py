@@ -933,28 +933,22 @@ elif selected == "Overall Stats - US" and st.session_state.status == "verified":
     st.write("Yesterday spend data:")
     st.dataframe(us_df[us_df['dt']==yesterday].sort_values(by='spend_in_usd', ascending=False).reset_index(drop=True), use_container_width=True)
     
-
     st.write("Current Month spend data:")
-    us_grouped_data_adacclevel = us_current_month_df.groupby([pd.to_datetime(us_current_month_df['dt']).dt.strftime('%b %y'), 'euid', 'ad_account_id', 'ad_account_name', 'currency_code'])[['spend_in_usd', 'spend']].sum().sort_values(ascending=False).reset_index()
+    us_grouped_data_adacclevel = us_current_month_df.groupby([pd.to_datetime(us_current_month_df['dt']).dt.strftime('%b %y'), 'euid', 'ad_account_id', 'ad_account_name', 'currency_code'])[[ 'spend','spend_in_usd']].sum().sort_values(by='spend_in_usd', ascending=False).reset_index()
     us_grouped_data_adacclevel.index += 1
     st.dataframe(us_grouped_data_adacclevel, use_container_width=True)
 
-    st.write("Current Month spend data:")
-    st.dataframe(us_current_month_df, use_container_width=True)
+    #top 10 spenders
+    st.write("Top 10 spenders:")
+    top_spenders = (
+        us_grouped_data_adacclevel.groupby([ 'euid', 'ad_account_id', 'ad_account_name'])["spend_in_usd"]
+        .sum()
+        .reset_index()
+        .sort_values(by="spend_in_usd", ascending=False)
+        .head(10)
+    )
 
-    # Display the updated DataFrame
-    st.write("Full Table with Spend in USD:")
-    st.dataframe(us_df, use_container_width=True)
-
-    # Display the updated DataFrame
-    st.write("Updated Table with Spend in USD:")
-    st.dataframe(us_grouped_data_adacclevel, use_container_width=True)
-
-    st.write('Day level spends')
-    us_grouped_data = us_df.groupby(['dt'])['spend_in_usd'].sum().reset_index().sort_values(by='dt', ascending=False)
-    st.dataframe(us_grouped_data, use_container_width=True)
-
-    st.line_chart(us_grouped_data, x='dt', y='spend_in_usd')
+    st.dataframe(top_spenders, use_container_width=True)
 
 
 elif selected == "Revenue-Analysis" and st.session_state.status == "verified":
@@ -1041,7 +1035,7 @@ elif selected == "Euid - adaccount mapping" and st.session_state.status == "veri
 
 elif selected == "Top accounts" and st.session_state.status == "verified":
     
-    non_usd_currencies = top_spends_df['currency'].unique()
+    non_usd_currencies = df['currency'].unique()
     non_usd_currencies = [currency for currency in non_usd_currencies if currency != 'USD']
 
        # Create a dictionary to store the conversion rates entered by the user

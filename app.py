@@ -530,25 +530,88 @@ datong_ids = [
 ]
 
 roposo_ids = [
-    'act_759315738654233', 'act_957109429531250', 'act_225215876674518',
-    'act_3563973227209697', 'act_723792699245884', 'act_1100595954813761',
-    'act_586902686585383', 'act_1708627536373549', 'act_1198598904358357',
-    'act_870986978485811', 'act_417067534179569', 'act_1083450619593533',
-    'act_741576947416981', 'act_1784123958655548', 'act_901747601927271',
-    'act_2059544207742648', 'act_1058565595757779', 'act_1306548849911815',
-    'act_1077926824004942', 'act_589022446887185', 'act_873580428253310',
-    'act_965249685184093', 'act_565292762205849', 'act_3506352382952497',
-    'act_6915108528593741', 'act_24221841557403126', 'act_884037987128219',
-    'act_604278331059492', 'act_881404577110091', 'act_1733494130732206',
-    'act_722518396265984', 'act_767160144989024', 'act_953514250166844',
-    'act_1068783194317542', 'act_397827242568247', 'act_1097129248477609',
-    'act_308308454982919', 'act_1653390585242405', 'act_571119348702020',
-    'act_1239769893841877', 'act_427844130047005', 'act_1237873617243932',
-    'act_789733129886592', 'act_1860659564374272', 'act_1292987141870282',
-    'act_1068783194317542', 'act_583622110895013', 'act_1116376310060202',
-    'act_3996805340594743', 'act_349751667850753', 'act_3602799093345049',
-    'act_281403371310608', 'act_216902994241137', 'act_1616818125847387',
-    'act_169277159280041'
+    'act_759315738654233',
+'act_957109429531250',
+'act_3563973227209697',
+'act_586902686585383',
+'act_1100595954813761',
+'act_417067534179569',
+'act_870986978485811',
+'act_225215876674518',
+'act_723792699245884',
+'act_741576947416981',
+'act_604278331059492',
+'act_1784123958655548',
+'act_1083450619593533',
+'act_901747601927271',
+'act_2059544207742648',
+'act_1708627536373549',
+'act_1198598904358357',
+'act_1058565595757779',
+'act_1306548849911815',
+'act_1077926824004942',
+'act_589022446887185',
+'act_873580428253310',
+'act_965249685184093',
+'act_565292762205849',
+'act_3506352382952497',
+'act_6915108528593741',
+'act_24221841557403126',
+'act_884037987128219',
+'act_881404577110091',
+'act_1733494130732206',
+'act_722518396265984',
+'act_767160144989024',
+'act_953514250166844',
+'act_1068783194317542',
+'act_397827242568247',
+'act_1097129248477609',
+'act_308308454982919',
+'act_1653390585242405',
+'act_571119348702020',
+'act_1239769893841877',
+'act_427844130047005',
+'act_1237873617243932',
+'act_789733129886592',
+'act_1860659564374272',
+'act_1292987141870282',
+'act_1068783194317542',
+'act_583622110895013',
+'act_1116376310060202',
+'act_3996805340594743',
+'act_349751667850753',
+'act_3602799093345049',
+'act_281403371310608',
+'act_216902994241137',
+'act_1616818125847387',
+'act_169277159280041',
+'act_504437282593792',
+'act_431263196219676',
+'act_1106653140826024',
+'act_557343190568045',
+'act_185568974220256',
+'act_2552378681618018',
+'act_1616818125847387',
+'act_1644634809454304',
+'act_1445453332977761',
+'act_2481281658838112',
+'act_1085376779696148',
+'act_688943616115812',
+'act_719717626460829',
+'act_889366715657115',
+'act_3613726142202247',
+'act_1583482562266651',
+'act_1949783425508754',
+'act_735898258036410',
+'act_1282562349131228',
+'act_294008606434173',
+'act_189234800895571',
+'act_570111399050038',
+'act_283182437693605',
+'act_926201962276582',
+'act_1518996148767815',
+'act_2977476152390374',
+'act_1584376045533840'
 ]
 
 # Define a helper function for classification
@@ -786,7 +849,8 @@ if selected == "Key Account Stats" and st.session_state.status == "verified":
     summary_df = filtered_df
     summary_df.loc[:, 'month'] = filtered_df['dt'].apply(lambda x: x.strftime('%b-%y'))  # Month format as Jan-24
     # st.dataframe(summary_df, use_container_width=True)
-    # summary_df = summary_df.merge(yst_stats_df, on=['euid','ad_account_id'], how='left', suffixes=('', '_yesterday')).rename(columns={'spend':'yesterday_spend'})
+    summary_df = summary_df.merge(yst_stats_df, on=['euid','ad_account_id'], how='left', suffixes=('', '_yesterday'))
+    summary_df = summary_df.fillna(0)
     # st.dataframe(summary_df, use_container_width=True)
     summary_df = summary_df.merge(current_month_stats_df, on=['euid','ad_account_id'], how='left', suffixes=('', '_curr_month'))
     summary_df = summary_df.fillna(0)
@@ -794,8 +858,8 @@ if selected == "Key Account Stats" and st.session_state.status == "verified":
     summary_df = summary_df.fillna(0)
     # print(summary_df.columns)
     # st.dataframe(summary_df, use_container_width=True)
-    summary_df = summary_df.groupby(['euid','ad_account_id','business_name','company_name','month','spend_curr_month','spend_total'])['spend'].sum().reset_index()
-    summary_df = summary_df.pivot(index=['euid','ad_account_id','business_name','company_name','spend_total','spend_curr_month'], columns='month', values='spend')
+    summary_df = summary_df.groupby(['euid','ad_account_id','business_name','company_name','month','spend_yesterday','spend_curr_month','spend_total'])['spend'].sum().reset_index()
+    summary_df = summary_df.pivot(index=['euid','ad_account_id','business_name','company_name','spend_total','spend_curr_month','spend_yesterday'], columns='month', values='spend')
 
 
     # Sort the columns by date

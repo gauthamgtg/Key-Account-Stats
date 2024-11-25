@@ -879,8 +879,8 @@ elif selected == "Raw Data" and st.session_state.status == "verified":
     st.title("Raw Data Page")
     st.write("This is where raw data will be displayed.")
 
-    st.write("tes")
-    st.dataframe(tot_new_df, use_container_width=True)
+    # st.write("tes")
+    # st.dataframe(df, use_container_width=True)
 
     st.write("Enterprise spends raw dump")
     st.dataframe(df, use_container_width=True)

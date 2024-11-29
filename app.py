@@ -81,7 +81,6 @@ query = '''
 with spends AS
     (SELECT  max(cast(euid as float))euid ,ad_account_id,date(date_start) as dt,(spend)spend
     from  ad_account_spends aas 
-    where date(date_start)!='2024-11-13'
     group by 2,3,4
     ),
     total_payment AS
@@ -480,7 +479,7 @@ where aas.ad_account_id in (
 
 
 
-@st.cache_data(ttl=86400)  # 86400 seconds = 24 hours
+@st.cache_data(ttl=36400)  # 86400 seconds = 24 hours
 @redshift_connection(db,name,passw,server,port)
 def execute_query(connection, cursor,query):
 
@@ -500,140 +499,6 @@ ai_campaign_spends_df = execute_query(query=zocket_ai_campaigns_spends_query)
 disabled_account_df = execute_query(query=disabled_account_query)
 datong_api_df = execute_query(query=datong_api_query) 
 
-
-# SHEET_ID = "1QntapBcbPYuHxRcTDZPzHIkhjOAlAuyLXMv7D_f-yFo"
-# csv_url = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv"
-
-
-# # Load the sheet into a DataFrame
-# spends_new_df = pd.read_csv(csv_url)
-
-# #query the spends_new_df using sql
-# spends_new_df = spends_new_df.groupby(['date_start','date_stop','ad_account_id','app_ad_account_id','id','spend'], as_index=False)['euid'].agg({'euid':'max'})
-
-# # Tables
-# enterprise_users=execute_query(query=enterprise_users)
-# fb_ad_accounts=execute_query(query=fb_ad_accounts)
-# fb_business_managers=execute_query(query=fb_business_managers)
-
-# # df = df + spends_after_df[spends_after_df['date_start'] >= '2024-11-13']
-
-# tot_new_df = spends_new_df.merge(enterprise_users,on='euid',how='left')
-# tot_new_df = tot_new_df.merge(fb_ad_accounts,on='ad_account_id',how='left')
-# tot_new_df = tot_new_df.merge(fb_business_managers,right_on='id',left_on='app_business_manager_id',how='left')
-
-# # Define ID lists for clarity
-# datong_ids = [
-#     'act_517235807318296', 'act_331025229860027', 'act_1026427545158424',
-#     'act_818603109556933', 'act_245995025197404', 'act_3592100964402439',
-#     'act_3172162799744723', 'act_1980162379033639', 'act_1364907264123936',
-#     'act_749694046972238', 'act_1841833786300802', 'act_206144919151515',
-#     'act_324812700362567', 'act_3505294363025995', 'act_7780020542024454',
-#     'act_650302000225354', 'act_1769761460112751', 'act_659696249436257',
-#     'act_1729204737559911', 'act_383479978116390', 'act_1729204737559911',
-#     'act_1065735074925239'
-# ]
-
-# roposo_ids = ['act_759315738654233',
-# 'act_957109429531250',
-# 'act_3563973227209697',
-# 'act_586902686585383',
-# 'act_1100595954813761',
-# 'act_417067534179569',
-# 'act_870986978485811',
-# 'act_225215876674518',
-# 'act_723792699245884',
-# 'act_741576947416981',
-# 'act_604278331059492',
-# 'act_1784123958655548',
-# 'act_1083450619593533',
-# 'act_901747601927271',
-# 'act_2059544207742648',
-# 'act_1708627536373549',
-# 'act_1198598904358357',
-# 'act_1058565595757779',
-# 'act_1306548849911815',
-# 'act_1077926824004942',
-# 'act_589022446887185',
-# 'act_873580428253310',
-# 'act_965249685184093',
-# 'act_565292762205849',
-# 'act_3506352382952497',
-# 'act_6915108528593741',
-# 'act_24221841557403126',
-# 'act_884037987128219',
-# 'act_881404577110091',
-# 'act_1733494130732206',
-# 'act_722518396265984',
-# 'act_767160144989024',
-# 'act_953514250166844',
-# 'act_1068783194317542',
-# 'act_397827242568247',
-# 'act_1097129248477609',
-# 'act_308308454982919',
-# 'act_1653390585242405',
-# 'act_571119348702020',
-# 'act_1239769893841877',
-# 'act_427844130047005',
-# 'act_1237873617243932',
-# 'act_789733129886592',
-# 'act_1860659564374272',
-# 'act_1292987141870282',
-# 'act_1068783194317542',
-# 'act_583622110895013',
-# 'act_1116376310060202',
-# 'act_3996805340594743',
-# 'act_349751667850753',
-# 'act_3602799093345049',
-# 'act_281403371310608',
-# 'act_216902994241137',
-# 'act_1616818125847387',
-# 'act_169277159280041',
-# 'act_504437282593792',
-# 'act_431263196219676',
-# 'act_1106653140826024',
-# 'act_557343190568045',
-# 'act_185568974220256',
-# 'act_2552378681618018',
-# 'act_1616818125847387',
-# 'act_1644634809454304',
-# 'act_1445453332977761',
-# 'act_2481281658838112',
-# 'act_1085376779696148',
-# 'act_688943616115812',
-# 'act_719717626460829',
-# 'act_889366715657115',
-# 'act_3613726142202247',
-# 'act_1583482562266651',
-# 'act_1949783425508754',
-# 'act_735898258036410',
-# 'act_1282562349131228',
-# 'act_294008606434173',
-# 'act_189234800895571',
-# 'act_570111399050038',
-# 'act_283182437693605',
-# 'act_926201962276582',
-# 'act_1518996148767815',
-# 'act_2977476152390374',
-# 'act_1584376045533840'
-# ]
-
-# # Define a helper function for classification
-# def classify_account(row):
-#     if row['ad_account_id'] in datong_ids:
-#         return 'Datong'
-#     elif row['ad_account_id'] in roposo_ids and row['date_start'] >= '2024-10-01':
-#         return 'Roposo'
-#     else:
-#         return 'Others'
-
-# # Apply the classification function
-# tot_new_df['top_customers_flag'] = tot_new_df.apply(classify_account, axis=1)
-
-
-# tot_new_df = tot_new_df.rename(columns={'ad_account_name':'euid_ad_account_name','name_x':'ad_account_name','name_y':'business_manager_name','date_start':'dt','currency':'currency_code'})
-
-# df = tot_new_df[['ad_account_id','euid','spend','dt','top_customers_flag','ad_account_name','business_manager_name','company_name','business_name','currency_code']]
 
 #chaning proper format of date
 df['dt'] = pd.to_datetime(df['dt']).dt.date

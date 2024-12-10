@@ -114,7 +114,11 @@ case when a.ad_account_id
         'act_1729204737559911',
         'act_383479978116390',
         'act_1729204737559911',
-        'act_1065735074925239') then 'Datong' 
+        'act_1065735074925239',
+        'act_2018452351931643',
+        'act_1307983750616862',
+        'act_1521400741909811',
+        'act_2954031968090066') then 'Datong' 
         when a.euid in (2310,2309,2202,2201,2181,2168,2100,2051,2281,2394) then 'FB Boost'
         when a.euid in (1911)then 'Adfly' 
         when a.euid in  ( 527, 785, 1049, 1230, 1231) or a.ad_account_id ='act_797532865863232' then 'Eleganty'

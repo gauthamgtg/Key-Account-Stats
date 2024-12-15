@@ -288,7 +288,9 @@ case when a.ad_account_id
         else 'Others' end as top_customers_flag
 from 
     spends a
-    left join fb_ad_accounts b on a.ad_account_id = b.ad_account_id
+    left join ( select ad_account_id,name,currency,max(app_business_manager_id)app_business_manager_id
+    from fb_ad_accounts 
+    group by 1,2,3 )b on a.ad_account_id = b.ad_account_id
     left join fb_business_managers c on c.id = b.app_business_manager_id
     left join enterprise_users eu on eu.euid=c.app_business_id
     order by euid,dt desc

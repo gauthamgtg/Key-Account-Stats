@@ -79,16 +79,16 @@ def redshift_connection(dbname, user, password, host, port):
 
 query = '''
 with spends AS
-    (SELECT  max(cast(euid as float))euid ,ad_account_id,date(date_start) as dt,(spend)spend
+    (SELECT  ad_account_id,date(date_start) as dt,max(spend)spend
     from  ad_account_spends aas 
-    group by 2,3,4
+	group by 1,2
     ),
     total_payment AS
-        (select cast(td.euid as float)euid,ad_account,sum(adspend_amount) total_paid 
+        (select ad_account,sum(adspend_amount) total_paid 
         from payment_trans_details td
         group by 1,2)
 
-select a.euid,eu.business_name,eu.company_name,dt,coalesce(b.name,d.name) as ad_account_name,
+select c.app_business_id as euid,eu.business_name,eu.company_name,dt,coalesce(b.name,d.name) as ad_account_name,
 coalesce(c.name,e.name) as business_manager_name,
 COALESCE(b.currency,d.currency,'INR') as currency_code,a.ad_account_id,spend,
 case when a.ad_account_id
@@ -119,79 +119,178 @@ case when a.ad_account_id
         'act_1307983750616862',
         'act_1521400741909811',
         'act_2954031968090066') then 'Datong' 
-        when a.euid in (2310,2309,2202,2201,2181,2168,2100,2051,2281,2394) then 'FB Boost'
-        when a.euid in (1911)then 'Adfly' 
-        when a.euid in  ( 527, 785, 1049, 1230, 1231) or a.ad_account_id ='act_797532865863232' then 'Eleganty'
+        when c.app_business_id in (2310,2309,2202,2201,2181,2168,2100,2051,2281,2394) then 'FB Boost'
+        when c.app_business_id in (1911)then 'Adfly' 
+        when c.app_business_id in  ( 527, 785, 1049, 1230, 1231) or a.ad_account_id ='act_797532865863232' then 'Eleganty'
         when a.ad_account_id in 
-        ('act_759315738654233',
-            'act_957109429531250',
-            'act_225215876674518',
-            'act_3563973227209697',
-            'act_723792699245884',
-            'act_1100595954813761',
-            'act_586902686585383',
-            'act_1708627536373549',
-            'act_1198598904358357',
+        ('act_926201962276582',
+            'act_1518996148767815',
+            'act_283182437693605',
             'act_870986978485811',
-            'act_417067534179569',
-            'act_1083450619593533',
+            'act_2977476152390374',
+            'act_1584376045533840',
             'act_741576947416981',
-            'act_1784123958655548',
-            'act_901747601927271',
-            'act_2059544207742648',
-            'act_1058565595757779',
-            'act_1306548849911815',
-            'act_1077926824004942',
-            'act_589022446887185',
-            'act_873580428253310',
+            'act_476910184892869',
+            'act_898889421329382',
+            'act_1575019052979670',
+            'act_1808581176617313',
+            'act_884037987128219',
+            'act_3506352382952497',
+            'act_489316499946843',
+            'act_607352157650024',
+            'act_281403371310608',
+            'act_151947304471405',
+            'act_1068783194317542',
+            'act_1068783194317542',
+            'act_1292987141870282',
+            'act_24221841557403126',
             'act_965249685184093',
             'act_565292762205849',
-            'act_3506352382952497',
-            'act_6915108528593741',
-            'act_24221841557403126',
-            'act_884037987128219',
-            'act_604278331059492',
-            'act_881404577110091',
-            'act_1733494130732206',
             'act_722518396265984',
-            'act_767160144989024',
-            'act_953514250166844',
-            'act_1068783194317542',
-            'act_397827242568247',
-            'act_1097129248477609',
-            'act_308308454982919',
-            'act_1653390585242405',
-            'act_571119348702020',
-            'act_1239769893841877',
+            'act_1784123958655548',
+            'act_901747601927271',
             'act_427844130047005',
-            'act_1237873617243932',
-            'act_789733129886592',
+            'act_1282562349131228',
+            'act_1192025228177331',
+            'act_688943616115812',
+            'act_767160144989024',
+            'act_308308454982919',
+            'act_1083450619593533',
+            'act_1653390585242405',
+            'act_169277159280041',
+            'act_889366715657115',
+            'act_604278331059492',
             'act_1860659564374272',
-            'act_1292987141870282',
-            'act_1068783194317542',
+            'act_873580428253310',
+            'act_216902994241137',
+            'act_5922789224424039',
+            'act_735898258036410',
+            'act_1306548849911815',
+            'act_514009980689341',
+            'act_1097129248477609',
+            'act_1058565595757779',
+            'act_881404577110091',
+            'act_6105820032831596',
+            'act_1394810381350847',
+            'act_780922136928954',
+            'act_2283830365110063',
+            'act_1356626195134046',
+            'act_880735654213569',
+            'act_8766140423423832',
+            'act_203005676060367',
+            'act_1434558773983739',
+            'act_1081617916800011',
+            'act_589148723475422',
+            'act_1096127282058443',
+            'act_1273797260327201',
+            'act_1122759572702577',
+            'act_584527074259791',
+            'act_254077160677497',
+            'act_989565319878933',
+            'act_889351973307670',
+            'act_280940417737704',
+            'act_3816960438516519',
+            'act_2250289218672133',
+            'act_1190414661670653',
+            'act_1655128932085551',
+            'act_292305926681452',
+            'act_148992597824742',
+            'act_1109580570350734',
+            'act_3368605639943487',
+            'act_627328960104400',
+            'act_1576810802933554',
+            'act_1069296384990185',
+            'act_431263196219676',
+            'act_1106653140826024',
+            'act_557343190568045',
+            'act_719717626460829',
+            'act_1160684574649777',
+            'act_825903966195572',
+            'act_1455994885788787',
+            'act_3613726142202247',
+            'act_1583482562266651',
+            'act_1949783425508754',
+            'act_1129008205233310',
+            'act_2067912740221796',
+            'act_1789118071860690',
+            'act_3741550799489465',
+            'act_942819674438412',
+            'act_886514543466261',
+            'act_1223815532022788',
+            'act_1241443840476355',
+            'act_985610253609004',
+            'act_1649931122255134',
+            'act_612684737776138',
+            'act_294008606434173',
+            'act_189234800895571',
+            'act_570111399050038',
+            'act_533459472189951',
+            'act_541172815361037',
+            'act_1430955031173023',
+            'act_164546532672807',
+            'act_602613569385841',
+            'act_1076609240606982',
+            'act_417067534179569',
+            'act_953514250166844',
+            'act_397827242568247',
+            'act_1100595954813761',
+            'act_1708627536373549',
+            'act_185568974220256',
+            'act_2552378681618018',
+            'act_1075356080721083',
+            'act_893226298453970',
+            'act_1318334285559258',
+            'act_2569213876607328',
+            'act_1294766011720496',
+            'act_558388417004205',
+            'act_1096414978286208',
+            'act_1237873617243932',
+            'act_1198598904358357',
+            'act_1077926824004942',
+            'act_1239769893841877',
             'act_583622110895013',
             'act_1116376310060202',
             'act_3996805340594743',
             'act_349751667850753',
             'act_3602799093345049',
-            'act_281403371310608',
-            'act_216902994241137',
+            'act_725548192392270',
+            'act_545773498304947',
+            'act_3827416530834864',
+            'act_653664360149199',
+            'act_905633270654663',
+            'act_3357095267872666',
+            'act_5813305362113378',
+            'act_598865381850585',
+            'act_268437995509783',
+            'act_527282746010422',
+            'act_957109429531250',
+            'act_3563973227209697',
+            'act_2059544207742648',
+            'act_6915108528593741',
+            'act_723792699245884',
+            'act_225215876674518',
+            'act_589022446887185',
+            'act_1733494130732206',
+            'act_571119348702020',
+            'act_789733129886592',
+            'act_1143525397390351',
+            'act_586902686585383',
+            'act_504437282593792',
+            'act_1644634809454304',
+            'act_1343163873314208',
+            'act_2951094505024021',
+            'act_759315738654233',
             'act_1616818125847387',
-            'act_169277159280041'
-        ) and dt>='2024-10-01' then 'Roposo' 
+            'act_4136352729838579',
+            'act_1445453332977761',
+            'act_2481281658838112',
+            'act_1085376779696148') and dt>='2024-10-01' then 'Roposo' 
         else 'Others' end as top_customers_flag
 from 
-     (
-        select euid,ad_account_id,dt,sum(spend)spend
-        from spends
-        group by 1,2,3
-    )a
-    left join enterprise_users eu on eu.euid=a.euid
+    spends a
     left join fb_ad_accounts b on a.ad_account_id = b.ad_account_id
     left join fb_business_managers c on c.id = b.app_business_manager_id
-    left join z_b.fb_ad_accounts d on a.ad_account_id = d.ad_account_id
-    left join z_b.fb_business_managers e on e.id = d.app_business_manager_id
-
+    left join enterprise_users eu on eu.euid=a.euid
     order by euid,dt desc
     '''
 
@@ -1152,7 +1251,7 @@ elif selected == "Top accounts" and st.session_state.status == "verified":
         end_date = st.date_input("End Date", value=datetime.now())
 
     # Filter DataFrame by selected date range
-    filtered_df = filtered_df[(filtered_df['dt'] >= pd.to_datetime(start_date)) & (filtered_df['dt'] <= pd.to_datetime(end_date))]
+    filtered_df = filtered_df[(filtered_df['dt'] >= pd.Timestamp(start_date)) & (filtered_df['dt'] <= pd.Timestamp(end_date))]
 
     # Aggregate spend per business and get the top 10
     top_spenders = (

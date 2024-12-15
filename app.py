@@ -86,7 +86,7 @@ with spends AS
     total_payment AS
         (select ad_account,sum(adspend_amount) total_paid 
         from payment_trans_details td
-        group by 1,2)
+        group by 1)
 
 select c.app_business_id as euid,eu.business_name,eu.company_name,dt,coalesce(b.name,d.name) as ad_account_name,
 coalesce(c.name,e.name) as business_manager_name,

@@ -86,11 +86,11 @@ with spends AS
     total_payment AS
         (select ad_account,sum(adspend_amount) total_paid 
         from payment_trans_details td
-        group by 1,2)
+        group by 1)
 
-select c.app_business_id as euid,eu.business_name,eu.company_name,dt,coalesce(b.name,d.name) as ad_account_name,
-coalesce(c.name,e.name) as business_manager_name,
-COALESCE(b.currency,d.currency,'INR') as currency_code,a.ad_account_id,spend,
+select c.app_business_id as euid,eu.business_name,eu.company_name,dt,b.name as ad_account_name,
+c.name as business_manager_name,
+COALESCE(b.currency,'INR') as currency_code,a.ad_account_id,spend,
 case when a.ad_account_id
         in
         ('act_517235807318296',
@@ -290,7 +290,7 @@ from
     spends a
     left join fb_ad_accounts b on a.ad_account_id = b.ad_account_id
     left join fb_business_managers c on c.id = b.app_business_manager_id
-    left join enterprise_users eu on eu.euid=a.euid
+    left join enterprise_users eu on eu.euid=c.app_business_id
     order by euid,dt desc
     '''
 

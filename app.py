@@ -118,7 +118,7 @@ case when a.ad_account_id
         'act_2018452351931643',
         'act_1307983750616862',
         'act_1521400741909811',
-        'act_2954031968090066') then 'Datong' 
+        'act_2954031968090066','act_1521400741909811') then 'Datong' 
         when c.app_business_id in (2310,2309,2202,2201,2181,2168,2100,2051,2281,2394) then 'FB Boost'
         when c.app_business_id in (1911)then 'Adfly' 
         when c.app_business_id in  ( 527, 785, 1049, 1230, 1231) or a.ad_account_id ='act_797532865863232' then 'Eleganty'
@@ -969,7 +969,7 @@ elif selected == "Overall Stats - US" and st.session_state.status == "verified":
     us_df = pd.concat([us_df,ai_spends_df], ignore_index=True)
 
     #remove duplicates
-    us_df = us_df.drop_duplicates(subset=['ad_account_id', 'dt'], keep='last')
+    us_df = us_df.drop_duplicates(subset=['ad_account_id', 'dt'], keep='first')
 
     us_df['spend'] = pd.to_numeric(us_df['spend'], errors='coerce')
     us_df['spend'] = us_df['spend'].fillna(0)

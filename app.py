@@ -10,6 +10,7 @@ import pandas as pd
 import hmac
 import boto3
 import json
+import stripe
 
 client = boto3.client(
     "secretsmanager",
@@ -30,7 +31,7 @@ name = secret["name"]
 passw = secret["passw"]
 server = secret["server"]
 port = secret["port"]
-
+stripe_key = secret["stripe"]
 
 
 st.set_page_config( page_title = "Spend Stats",
@@ -80,7 +81,10 @@ def redshift_connection(dbname, user, password, host, port):
 query = '''
 with spends AS
     (SELECT  ad_account_id,date(date_start) as dt,max(spend)spend
-    from  ad_account_spends aas 
+    from 
+    (select * from ad_account_spends 
+    union ALL
+    select * from zocket_global.ad_account_spends)aas
 	group by 1,2
     ),
     total_payment AS
@@ -88,9 +92,9 @@ with spends AS
         from payment_trans_details td
         group by 1)
 
-select c.app_business_id as euid,eu.business_name,eu.company_name,dt,b.name as ad_account_name,
-c.name as business_manager_name,
-COALESCE(b.currency,'INR') as currency_code,a.ad_account_id,spend,
+select coalesce(c.app_business_id,bp.id) as euid,coalesce(eu.business_name,bp.name) as business_name,coalesce(eu.company_name,bp.brand_name) as company_name,dt,coalesce(b.name,d.name) as ad_account_name,
+coalesce(c.name,e.name) as business_manager_name,
+COALESCE(b.currency,d.currency) as currency_code,a.ad_account_id,spend,
 case when a.ad_account_id
         in
         ('act_517235807318296',
@@ -293,6 +297,9 @@ from
     group by 1,2,3 )b on a.ad_account_id = b.ad_account_id
     left join fb_business_managers c on c.id = b.app_business_manager_id
     left join enterprise_users eu on eu.euid=c.app_business_id
+    left join zocket_global.fb_child_ad_accounts d on a.ad_account_id = d.ad_account_id
+    left join zocket_global.fb_child_business_managers e on e.id = d.app_business_manager_id
+    left join zocket_global.business_profile bp on e.app_business_id=bp.id
     order by euid,dt desc
     '''
 
@@ -391,7 +398,11 @@ SELECT distinct b.app_business_id as euid, a.ad_account_id, a.name as ad_account
 FROM z_b.fb_ad_accounts a
 	LEFT JOIN z_b.fb_business_managers b ON b.id = a.app_business_manager_id
    left join enterprise_users eu on b.app_business_id=eu.euid
-   order by 1 desc
+union all
+SELECT distinct b.app_business_id as euid, a.ad_account_id, a.name as ad_account_name, b.name as business_manager_name,bp.name,bp.brand_name
+FROM zocket_global.fb_child_ad_accounts a
+	LEFT JOIN zocket_global.fb_child_business_managers b ON b.id = a.app_business_manager_id
+   left join zocket_global.business_profile bp on b.app_business_id=bp.id
 '''
 
 top_spends_query='''
@@ -665,8 +676,8 @@ datong_api_df['per'] = pd.to_numeric(datong_api_df['per'], errors='coerce')
 with st.sidebar:
     selected = option_menu(
         menu_title="Navigation",  # Required
-        options=["Login","Key Account Stats", "Raw Data","Overall Stats - Ind","Overall Stats - US","Revenue-Analysis","Euid - adaccount mapping","Top accounts","AI account spends","FB API Campaign spends","Disabled Ad Accounts","Datong API VS Total Spends"],  # Required
-        icons=["lock","airplane-engines", "table","currency-rupee",'currency-dollar','cash-coin','link',"graph-up","robot","suit-spade","slash-circle","joystick"],  # Optional: icons from the Bootstrap library
+        options=["Login","Key Account Stats", "Raw Data","Overall Stats - Ind","Overall Stats - US","Revenue-Analysis","Euid - adaccount mapping","Top accounts","AI account spends","FB API Campaign spends","Disabled Ad Accounts","Datong API VS Total Spends","Stripe Transaction"],  # Required
+        icons=["lock","airplane-engines", "table","currency-rupee",'currency-dollar','cash-coin','link',"graph-up","robot","suit-spade","slash-circle","joystick","credit-card-2-front-fill"],  # Optional: icons from the Bootstrap library
         menu_icon="cast",  # Optional: main menu icon
         default_index=0,  # Default active menu item
     )
@@ -956,20 +967,20 @@ elif selected == "Overall Stats - US" and st.session_state.status == "verified":
     st.title("Overall Stats - US")
 
     us_df = df[df['currency_code'].str.lower() != 'inr']
-    ai_spends_df = ai_spends_df[ai_spends_df['currency_code'].str.lower() != 'inr']
+    # ai_spends_df = ai_spends_df[ai_spends_df['currency_code'].str.lower() != 'inr']
 
-    us_df = us_df[['euid', 'ad_account_name',  'ad_account_id','currency_code', 'dt','spend']]
+    # us_df = us_df[['euid', 'ad_account_name',  'ad_account_id','currency_code', 'dt','spend']]
 
-    st.dataframe(us_df, use_container_width=True)
+    # st.dataframe(us_df, use_container_width=True)
 
-    # business_id,account_name,cs.ad_account_id,currency,date(date_start)dt,sum(spend)spend
+    # # business_id,account_name,cs.ad_account_id,currency,date(date_start)dt,sum(spend)spend
 
-    ai_spends_df = ai_spends_df[['euid', 'ad_account_name',  'ad_account_id','currency_code', 'dt','spend']]
+    # ai_spends_df = ai_spends_df[['euid', 'ad_account_name',  'ad_account_id','currency_code', 'dt','spend']]
 
-    us_df = pd.concat([us_df,ai_spends_df], ignore_index=True)
+    # us_df = pd.concat([us_df,ai_spends_df], ignore_index=True)
 
-    #remove duplicates
-    us_df = us_df.drop_duplicates(subset=['ad_account_id', 'dt'], keep='first')
+    # #remove duplicates
+    # us_df = us_df.drop_duplicates(subset=['ad_account_id', 'dt'], keep='first')
 
     us_df['spend'] = pd.to_numeric(us_df['spend'], errors='coerce')
     us_df['spend'] = us_df['spend'].fillna(0)
@@ -1739,3 +1750,85 @@ elif selected == "Datong API VS Total Spends" and st.session_state.status == "ve
     st.dataframe(datong_api_df, use_container_width=True)
 
    
+
+
+elif selected == "Stripe Transaction" and st.session_state.status == "verified":
+
+    # Set your Stripe API key here
+    stripe.api_key = stripe_key
+
+    def get_balance_transaction_fee(balance_transaction_id):
+        try:
+            balance_txn = stripe.BalanceTransaction.retrieve(balance_transaction_id)
+            fee_amount = balance_txn.fee  # in cents
+            currency = balance_txn.currency.upper()
+            return fee_amount, currency
+        except Exception:
+            return None, None
+
+    def get_last_100_charges_by_billing_email(email):
+
+        # Fetch the last 100 charges
+        charges = stripe.Charge.list(limit=100)
+        
+        # Filter by billing_details.email
+        matched_charges = [c for c in charges.data if c.billing_details and c.billing_details.email == email]
+        return matched_charges
+
+    # Streamlit UI
+    st.title("Stripe Payments by Email - Last 100 Charges")
+
+    # Input email
+    email = st.text_input("Enter the Email to find charges")
+
+    if st.button("Find Payments"):
+        if email:
+            with st.spinner("Searching the last 100 charges..."):
+                transactions = get_last_100_charges_by_billing_email(email)
+                
+                if not transactions:
+                    st.error(f"No transactions found for Email '{email}' in the last 100 charges.")
+                else:
+                    st.success(f"Found {len(transactions)} transaction(s) for Email '{email}'!")
+                    
+                    # Prepare data for DataFrame
+                    data = []
+                    for transaction in transactions:
+                        # Retrieve fee if possible
+                        fee_amount, fee_currency = (None, None)
+                        if transaction.balance_transaction:
+                            fee_amount, fee_currency = get_balance_transaction_fee(transaction.balance_transaction)
+                        
+                        amount = transaction.amount / 100
+                        currency = transaction.currency.upper()
+                        status = transaction.status.capitalize()
+                        description = transaction.description or "No description"
+                        date_str = datetime.utcfromtimestamp(transaction.created).strftime('%Y-%m-%d %H:%M:%S UTC')
+                        payment_intent = transaction.payment_intent
+                        charge_id = transaction.id
+                        final_email = transaction.billing_details.email
+
+                        fee_str = f"{(fee_amount / 100):.2f} {fee_currency}" if fee_amount is not None else "N/A"
+                        
+                        data.append({
+                            "Charge ID": charge_id,
+                            "Payment Intent ID": payment_intent,
+                            "Status": status,
+                            "Currency": currency,
+                            "Amount": f"{amount:.2f} {currency}",
+                            "Stripe Processing Fee": fee_str,
+                            "Date": date_str,
+                            "Description": description,
+                            "Billing Email Used": final_email
+                        })
+                    
+                    df = pd.DataFrame(data)
+                    
+                    # Filter to show only succeeded transactions
+                    df = df[df['Status'] == 'Succeeded']
+
+                    # Display the DataFrame as a table
+                    st.write("### Transactions Details")
+                    st.dataframe(df)
+        else:
+            st.warning("Please enter a valid email address.")

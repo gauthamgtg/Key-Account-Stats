@@ -6,3 +6,4 @@ pandas
 boto3
 gdown
 stripe
+numpy

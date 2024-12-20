@@ -11,6 +11,8 @@ import hmac
 import boto3
 import json
 import stripe
+import numpy
+
 
 client = boto3.client(
     "secretsmanager",
@@ -94,202 +96,7 @@ with spends AS
 
 select coalesce(c.app_business_id,bp.id) as euid,coalesce(eu.business_name,bp.name) as business_name,coalesce(eu.company_name,bp.brand_name) as company_name,dt,coalesce(b.name,d.name) as ad_account_name,
 coalesce(c.name,e.name) as business_manager_name,
-COALESCE(b.currency,d.currency) as currency_code,a.ad_account_id,spend,
-case when a.ad_account_id
-        in
-        ('act_517235807318296',
-        'act_331025229860027',
-        'act_1026427545158424',
-        'act_818603109556933',
-        'act_245995025197404',
-        'act_3592100964402439',
-        'act_3172162799744723',
-        'act_1980162379033639',
-        'act_1364907264123936',
-        'act_749694046972238',
-        'act_1841833786300802',
-        'act_206144919151515',
-        'act_324812700362567',
-        'act_3505294363025995',
-        'act_7780020542024454',
-        'act_650302000225354',
-        'act_1769761460112751',
-        'act_659696249436257',
-        'act_1729204737559911',
-        'act_383479978116390',
-        'act_1729204737559911',
-        'act_1065735074925239',
-        'act_2018452351931643',
-        'act_1307983750616862',
-        'act_1521400741909811',
-        'act_2954031968090066','act_1521400741909811') then 'Datong' 
-        when c.app_business_id in (2310,2309,2202,2201,2181,2168,2100,2051,2281,2394) then 'FB Boost'
-        when c.app_business_id in (1911)then 'Adfly' 
-        when c.app_business_id in  ( 527, 785, 1049, 1230, 1231) or a.ad_account_id ='act_797532865863232' then 'Eleganty'
-        when a.ad_account_id in 
-        ('act_926201962276582',
-            'act_1518996148767815',
-            'act_283182437693605',
-            'act_870986978485811',
-            'act_2977476152390374',
-            'act_1584376045533840',
-            'act_741576947416981',
-            'act_476910184892869',
-            'act_898889421329382',
-            'act_1575019052979670',
-            'act_1808581176617313',
-            'act_884037987128219',
-            'act_3506352382952497',
-            'act_489316499946843',
-            'act_607352157650024',
-            'act_281403371310608',
-            'act_151947304471405',
-            'act_1068783194317542',
-            'act_1068783194317542',
-            'act_1292987141870282',
-            'act_24221841557403126',
-            'act_965249685184093',
-            'act_565292762205849',
-            'act_722518396265984',
-            'act_1784123958655548',
-            'act_901747601927271',
-            'act_427844130047005',
-            'act_1282562349131228',
-            'act_1192025228177331',
-            'act_688943616115812',
-            'act_767160144989024',
-            'act_308308454982919',
-            'act_1083450619593533',
-            'act_1653390585242405',
-            'act_169277159280041',
-            'act_889366715657115',
-            'act_604278331059492',
-            'act_1860659564374272',
-            'act_873580428253310',
-            'act_216902994241137',
-            'act_5922789224424039',
-            'act_735898258036410',
-            'act_1306548849911815',
-            'act_514009980689341',
-            'act_1097129248477609',
-            'act_1058565595757779',
-            'act_881404577110091',
-            'act_6105820032831596',
-            'act_1394810381350847',
-            'act_780922136928954',
-            'act_2283830365110063',
-            'act_1356626195134046',
-            'act_880735654213569',
-            'act_8766140423423832',
-            'act_203005676060367',
-            'act_1434558773983739',
-            'act_1081617916800011',
-            'act_589148723475422',
-            'act_1096127282058443',
-            'act_1273797260327201',
-            'act_1122759572702577',
-            'act_584527074259791',
-            'act_254077160677497',
-            'act_989565319878933',
-            'act_889351973307670',
-            'act_280940417737704',
-            'act_3816960438516519',
-            'act_2250289218672133',
-            'act_1190414661670653',
-            'act_1655128932085551',
-            'act_292305926681452',
-            'act_148992597824742',
-            'act_1109580570350734',
-            'act_3368605639943487',
-            'act_627328960104400',
-            'act_1576810802933554',
-            'act_1069296384990185',
-            'act_431263196219676',
-            'act_1106653140826024',
-            'act_557343190568045',
-            'act_719717626460829',
-            'act_1160684574649777',
-            'act_825903966195572',
-            'act_1455994885788787',
-            'act_3613726142202247',
-            'act_1583482562266651',
-            'act_1949783425508754',
-            'act_1129008205233310',
-            'act_2067912740221796',
-            'act_1789118071860690',
-            'act_3741550799489465',
-            'act_942819674438412',
-            'act_886514543466261',
-            'act_1223815532022788',
-            'act_1241443840476355',
-            'act_985610253609004',
-            'act_1649931122255134',
-            'act_612684737776138',
-            'act_294008606434173',
-            'act_189234800895571',
-            'act_570111399050038',
-            'act_533459472189951',
-            'act_541172815361037',
-            'act_1430955031173023',
-            'act_164546532672807',
-            'act_602613569385841',
-            'act_1076609240606982',
-            'act_417067534179569',
-            'act_953514250166844',
-            'act_397827242568247',
-            'act_1100595954813761',
-            'act_1708627536373549',
-            'act_185568974220256',
-            'act_2552378681618018',
-            'act_1075356080721083',
-            'act_893226298453970',
-            'act_1318334285559258',
-            'act_2569213876607328',
-            'act_1294766011720496',
-            'act_558388417004205',
-            'act_1096414978286208',
-            'act_1237873617243932',
-            'act_1198598904358357',
-            'act_1077926824004942',
-            'act_1239769893841877',
-            'act_583622110895013',
-            'act_1116376310060202',
-            'act_3996805340594743',
-            'act_349751667850753',
-            'act_3602799093345049',
-            'act_725548192392270',
-            'act_545773498304947',
-            'act_3827416530834864',
-            'act_653664360149199',
-            'act_905633270654663',
-            'act_3357095267872666',
-            'act_5813305362113378',
-            'act_598865381850585',
-            'act_268437995509783',
-            'act_527282746010422',
-            'act_957109429531250',
-            'act_3563973227209697',
-            'act_2059544207742648',
-            'act_6915108528593741',
-            'act_723792699245884',
-            'act_225215876674518',
-            'act_589022446887185',
-            'act_1733494130732206',
-            'act_571119348702020',
-            'act_789733129886592',
-            'act_1143525397390351',
-            'act_586902686585383',
-            'act_504437282593792',
-            'act_1644634809454304',
-            'act_1343163873314208',
-            'act_2951094505024021',
-            'act_759315738654233',
-            'act_1616818125847387',
-            'act_4136352729838579',
-            'act_1445453332977761',
-            'act_2481281658838112',
-            'act_1085376779696148') and dt>='2024-10-01' then 'Roposo' 
-        else 'Others' end as top_customers_flag
+case when a.ad_account_id ='act_1090921776002942' then 'INR' else COALESCE(b.currency,d.currency) end as currency_code,a.ad_account_id,spend
 from 
     spends a
     left join ( select ad_account_id,name,currency,max(app_business_manager_id)app_business_manager_id
@@ -302,12 +109,6 @@ from
     left join zocket_global.business_profile bp on e.app_business_id=bp.id
     order by euid,dt desc
     '''
-
-# enterprise_users='''select * from enterprise_users'''
-
-# fb_ad_accounts='''select * from fb_ad_accounts'''
-
-# fb_business_managers='''select * from fb_business_managers'''
 
 sub_query = '''SELECT * FROM
 (
@@ -403,81 +204,7 @@ SELECT distinct b.app_business_id as euid, a.ad_account_id, a.name as ad_account
 FROM zocket_global.fb_child_ad_accounts a
 	LEFT JOIN zocket_global.fb_child_business_managers b ON b.id = a.app_business_manager_id
    left join zocket_global.business_profile bp on b.app_business_id=bp.id
-'''
-
-top_spends_query='''
-
-SELECT euid,dt,ad_account_id,ad_account_name,business_manager_name,currency_code as currency,
--- case when currency_code = 'INR' then cast(spend as text)
--- when currency_code='EUR' then cast(spend*1.09 as text)
--- when currency_code='GBP' then cast(spend*1.3 as text)
--- when currency_code='AUD' then cast(spend*0.66 as text)
--- when currency_code='USD' then cast(spend as text) end as converted_spend,
--- case when currency_code = 'INR' then 'INR'
--- when currency_code='EUR' then 'USD'
--- when currency_code='GBP' then 'USD'
--- when currency_code='AUD' then 'USD'
--- when currency_code='USD' then 'USD' end as converted_currency,
-spend as spend
-FROM
-(SELECT
- a.euid,a.ad_account_id,fba.name as ad_account_name ,fbm.name as business_manager_name,
- case when a.ad_account_id = 'act_507277141809499' then 'USD'
-when a.ad_account_id = 'act_1250764673028073' then 'USD'
-when fba.currency is null then 'INR' 
-else fba.currency end as currency_code,date_start as dt, spend
-    from  
-    (select business_manager_id,name,max(app_business_id)app_business_id,max(id)id
-     from fb_business_managers
-     group by 1,2) fbm 
-left join 
-fb_ad_accounts fba on fbm.id=fba.app_business_manager_id
-LEFT join ad_account_spends a on a.ad_account_id=fba.ad_account_id
-)
-
-'''
-# union_df = pd.concat([df1, df2])
-
-# print(union_df)
-
-
-ai_spends_query = '''
-
-SELECT
-business_id as euid,account_name as ad_account_name,cs.ad_account_id,currency as currency_code,bp.name as business_name,date(date_start)dt,b.name,sum(spend)spend
-from zocket_global.fb_campaign_age_gender_metrics_v3 cs
-left join 
-(select ad_account_id,account_type,min(business_id)business_id , min(business_manager_id)business_manager_id
-from zocket_global.fb_ad_accounts 
-GROUP by 1,2 ) faa_ind 
-on cs.ad_account_id=faa_ind.ad_account_id
-LEFT join zocket_global.business_profile bp on faa_ind.business_id=bp.id
-left join (SELECT name,business_manager_id from zocket_global.fb_child_business_managers) b 
-on faa_ind.business_manager_id = b.business_manager_id
-where faa_ind.account_type ='ZOCKET'
-group by 1,2,3,4,5,6,7
-order by 3
-'''
-
-#fb campaigns level query
-# zocket_ai_campaigns_spends_query = '''
-# select
-#     date(date_start) as dt,
-#     fcaa.business_id,
-#     gc.campaign_name,
-#     SUM(ggci.spend)spend,
-#     ggci.ad_account_id,
-#     ggci.currency,
-#     ggci.account_name
-# FROM
-#  zocket_global.fb_campaigns gc 
-#     join zocket_global.fb_campaign_age_gender_metrics_v3 ggci on gc.campaign_id = ggci.campaign_id 
-#     left join zocket_global.fb_ad_accounts fcaa on ggci.ad_account_id= fcaa.ad_account_id
-# where date(date_start)>='2024-09-01'
-# group by
-# 1,2,3,5,6,7
-
-# '''
+ '''
 
 #adlevel query
 zocket_ai_campaigns_spends_query='''
@@ -594,7 +321,6 @@ where aas.ad_account_id in (
 
 
 
-
 @st.cache_data(ttl=36400)  # 86400 seconds = 24 hours
 @redshift_connection(db,name,passw,server,port)
 def execute_query(connection, cursor,query):
@@ -607,14 +333,35 @@ def execute_query(connection, cursor,query):
 
 # df = execute_query(query=query)
 df = execute_query(query=query)
-sub_df = execute_query(query=sub_query)
+# sub_df = execute_query(query=sub_query)
 list_df = execute_query(query=list_query)
 # top_spends_df = execute_query(query=top_spends_query)
-ai_spends_df = execute_query(query=ai_spends_query)
+# ai_spends_df = execute_query(query=ai_spends_query)
 ai_campaign_spends_df = execute_query(query=zocket_ai_campaigns_spends_query)
 disabled_account_df = execute_query(query=disabled_account_query)
 datong_api_df = execute_query(query=datong_api_query) 
 
+
+# Load the CSV file
+
+url = "https://docs.google.com/spreadsheets/d/1JvJ5Pa5qFDvXq1KaR0YTiReUM39P0berAgtSEkvCnIs/export?format=csv"
+
+account_list_df = pd.read_csv(url)
+
+# Create a DataFrame for each column
+datong_acc_list_df = account_list_df[['Datong']].dropna(inplace=False)
+roposo_acc_list_df = account_list_df[['Roposo']].dropna(inplace=False)
+
+top_customers_flag = []
+for index, row in df.iterrows():
+    if row['ad_account_id'] in datong_acc_list_df.values:
+        top_customers_flag.append('Datong')
+    elif row['ad_account_id'] in roposo_acc_list_df.values:
+        top_customers_flag.append('Roposo')
+    else:
+        top_customers_flag.append('Others')
+
+df['top_customers_flag'] = top_customers_flag
 
 #chaning proper format of date
 df['dt'] = pd.to_datetime(df['dt']).dt.date
@@ -622,24 +369,30 @@ df['spend'] = pd.to_numeric(df['spend'], errors='coerce')
 df['euid'] = pd.to_numeric(df['euid'], errors='coerce')
 df =  df.fillna("Unknown")
 
+#sort by spend
+df = df.sort_values(by='spend', ascending=False)
+
+#remove duplicate by subset of dt and ad_account_id
+df = df.drop_duplicates(subset=['dt', 'ad_account_id'], keep='first')
+
 #Revenue analysis query
 
-sub_df['euid'] = pd.to_numeric(sub_df['euid'], errors='coerce')
-sub_df['plan_amount'] = pd.to_numeric(sub_df['plan_amount'], errors='coerce')
-# sub_df['ad_account_id'] = pd.to_numeric(sub_df['ad_account_id'], errors='coerce')
-sub_df['sub_start'] = pd.to_datetime(sub_df['sub_start']).dt.date
-sub_df['sub_end'] = pd.to_datetime(sub_df['sub_end']).dt.date
-sub_df['total_subscription_days'] = pd.to_numeric(sub_df['total_subscription_days'], errors='coerce')
-sub_df['subscription_days_completed'] = pd.to_numeric(sub_df['subscription_days_completed'], errors='coerce')
-sub_df['adspends_added'].fillna(0, inplace=True)
-sub_df['adspends_added'] = pd.to_numeric(sub_df['adspends_added'], errors='coerce')
-sub_df['expected_per_day_spend'] = pd.to_numeric(sub_df['expected_per_day_spend'], errors='coerce')
-sub_df['expected_td_spend'] = pd.to_numeric(sub_df['expected_td_spend'], errors='coerce')
-sub_df['actual_td_spend'] = pd.to_numeric(sub_df['actual_td_spend'], errors='coerce')
-sub_df['actual_td_util'] = pd.to_numeric(sub_df['actual_td_util'], errors='coerce')
-sub_df['expected_util'] = pd.to_numeric(sub_df['expected_util'], errors='coerce')
-sub_df['overall_util'] = pd.to_numeric(sub_df['overall_util'], errors='coerce')
-sub_df['rw'] = pd.to_numeric(sub_df['rw'], errors='coerce')
+# sub_df['euid'] = pd.to_numeric(sub_df['euid'], errors='coerce')
+# sub_df['plan_amount'] = pd.to_numeric(sub_df['plan_amount'], errors='coerce')
+# # sub_df['ad_account_id'] = pd.to_numeric(sub_df['ad_account_id'], errors='coerce')
+# sub_df['sub_start'] = pd.to_datetime(sub_df['sub_start']).dt.date
+# sub_df['sub_end'] = pd.to_datetime(sub_df['sub_end']).dt.date
+# sub_df['total_subscription_days'] = pd.to_numeric(sub_df['total_subscription_days'], errors='coerce')
+# sub_df['subscription_days_completed'] = pd.to_numeric(sub_df['subscription_days_completed'], errors='coerce')
+# sub_df['adspends_added'].fillna(0, inplace=True)
+# sub_df['adspends_added'] = pd.to_numeric(sub_df['adspends_added'], errors='coerce')
+# sub_df['expected_per_day_spend'] = pd.to_numeric(sub_df['expected_per_day_spend'], errors='coerce')
+# sub_df['expected_td_spend'] = pd.to_numeric(sub_df['expected_td_spend'], errors='coerce')
+# sub_df['actual_td_spend'] = pd.to_numeric(sub_df['actual_td_spend'], errors='coerce')
+# sub_df['actual_td_util'] = pd.to_numeric(sub_df['actual_td_util'], errors='coerce')
+# sub_df['expected_util'] = pd.to_numeric(sub_df['expected_util'], errors='coerce')
+# sub_df['overall_util'] = pd.to_numeric(sub_df['overall_util'], errors='coerce')
+# sub_df['rw'] = pd.to_numeric(sub_df['rw'], errors='coerce')
 
 # #adspends query
 # top_spends_df['dt'] = pd.to_datetime(top_spends_df['dt'])
@@ -672,12 +425,15 @@ datong_api_df['euid'] = pd.to_numeric(datong_api_df['euid'], errors='coerce')
 datong_api_df['total_spend'] = pd.to_numeric(datong_api_df['total_spend'], errors='coerce')
 datong_api_df['per'] = pd.to_numeric(datong_api_df['per'], errors='coerce')
 
+
+#removed revenue analysis
+
 #Sidebar
 with st.sidebar:
     selected = option_menu(
         menu_title="Navigation",  # Required
-        options=["Login","Key Account Stats", "Raw Data","Overall Stats - Ind","Overall Stats - US","Revenue-Analysis","Euid - adaccount mapping","Top accounts","AI account spends","FB API Campaign spends","Disabled Ad Accounts","Datong API VS Total Spends","Stripe Transaction"],  # Required
-        icons=["lock","airplane-engines", "table","currency-rupee",'currency-dollar','cash-coin','link',"graph-up","robot","suit-spade","slash-circle","joystick","credit-card-2-front-fill"],  # Optional: icons from the Bootstrap library
+        options=["Login","Key Account Stats", "Raw Data","Overall Stats - Ind","Overall Stats - US","Euid - adaccount mapping","Top accounts","AI account spends","FB API Campaign spends","Disabled Ad Accounts","Datong API VS Total Spends","Stripe Transaction","Summary"],  # Required
+        icons=["lock","airplane-engines", "table","currency-rupee",'currency-dollar','link',"graph-up","robot","suit-spade","slash-circle","joystick","credit-card-2-front-fill","book"],  # Optional: icons from the Bootstrap library
         menu_icon="cast",  # Optional: main menu icon
         default_index=0,  # Default active menu item
     )
@@ -860,20 +616,28 @@ elif selected == "Raw Data" and st.session_state.status == "verified":
     st.title("Raw Data Page")
     st.write("This is where raw data will be displayed.")
 
-    # st.write("tes")
-    # st.dataframe(df, use_container_width=True)
+    st.write("acc list")
+    st.dataframe(account_list_df, use_container_width=True)
+
+    st.write("datong_acc_list_df dump")
+    st.dataframe(datong_acc_list_df, use_container_width=True)
+
+    st.write("roposo acc list dump")
+    st.dataframe(roposo_acc_list_df, use_container_width=True)
+    st.write("tes")
+    st.dataframe(df, use_container_width=True)
 
     st.write("Enterprise spends raw dump")
     st.dataframe(df, use_container_width=True)
 
-    st.write("Subscriptions raw dump")
-    st.dataframe(sub_df, use_container_width=True)
+    # st.write("Subscriptions raw dump")
+    # st.dataframe(sub_df, use_container_width=True)
 
     st.write("Ad account and EUID list raw dump")
     st.dataframe(list_df, use_container_width=True)
 
-    st.write("Zocket AI Spends raw dump")
-    st.dataframe(ai_spends_df, use_container_width=True)
+    # st.write("Zocket AI Spends raw dump")
+    # st.dataframe(ai_spends_df, use_container_width=True)
 
     st.write("FBI API spends raw dump")
     st.dataframe(ai_campaign_spends_df, use_container_width=True)
@@ -1092,76 +856,77 @@ elif selected == "Overall Stats - US" and st.session_state.status == "verified":
     st.dataframe(top_spenders, use_container_width=True)
 
 
-elif selected == "Revenue-Analysis" and st.session_state.status == "verified":
+
+# elif selected == "Revenue-Analysis" and st.session_state.status == "verified":
 
 
-    # Streamlit App
-    st.title("Ad Subscription Dashboard")
+#     # Streamlit App
+#     st.title("Ad Subscription Dashboard")
 
-    # Currency Filter
-    currency_option = st.selectbox("Select Currency", ["India", "US"])
-    if currency_option == "India":
-        currency_filter = "INR"
-        filtered_df = sub_df[sub_df['currency'] == currency_filter].reset_index(drop=True)
-    elif currency_option == "US":
-        currency_filter = "INR"
-        filtered_df = sub_df[sub_df['currency'] != currency_filter]
-    # else:
-    #     filtered_df = sub_df  # Show all data if "All" is selected
+#     # Currency Filter
+#     currency_option = st.selectbox("Select Currency", ["India", "US"])
+#     if currency_option == "India":
+#         currency_filter = "INR"
+#         filtered_df = sub_df[sub_df['currency'] == currency_filter].reset_index(drop=True)
+#     elif currency_option == "US":
+#         currency_filter = "INR"
+#         filtered_df = sub_df[sub_df['currency'] != currency_filter]
+#     # else:
+#     #     filtered_df = sub_df  # Show all data if "All" is selected
 
-    # Key Metrics Display
-    st.header("Key Metrics")
+#     # Key Metrics Display
+#     st.header("Key Metrics")
 
-    # Arrange key metrics in columns for better layout
-    col1, col2, col3, col4 = st.columns(4)
+#     # Arrange key metrics in columns for better layout
+#     col1, col2, col3, col4 = st.columns(4)
 
-    # Calculations for metrics
-    total_accounts = filtered_df['ad_account_id'].nunique()
-    total_subscription_amount = filtered_df['plan_amount'].sum()
-    avg_plan_amount = filtered_df['plan_amount'].mean()
-    avg_utilization = filtered_df['actual_td_util'].mean()
-    total_spend = filtered_df['actual_td_spend'].sum()
-    expected_spend = filtered_df['expected_td_spend'].sum()
+#     # Calculations for metrics
+#     total_accounts = filtered_df['ad_account_id'].nunique()
+#     total_subscription_amount = filtered_df['plan_amount'].sum()
+#     avg_plan_amount = filtered_df['plan_amount'].mean()
+#     avg_utilization = filtered_df['actual_td_util'].mean()
+#     total_spend = filtered_df['actual_td_spend'].sum()
+#     expected_spend = filtered_df['expected_td_spend'].sum()
 
-    # Display metrics in columns
-    col1.metric("Total Accounts", total_accounts)
-    col2.metric("Total Subscription Amount", f"{total_subscription_amount:,.2f}")
-    col3.metric("Average Plan Amount", f"{avg_plan_amount:,.2f}")
-    col4.metric("Average Utilization (%)", f"{avg_utilization:.2f}%")
+#     # Display metrics in columns
+#     col1.metric("Total Accounts", total_accounts)
+#     col2.metric("Total Subscription Amount", f"{total_subscription_amount:,.2f}")
+#     col3.metric("Average Plan Amount", f"{avg_plan_amount:,.2f}")
+#     col4.metric("Average Utilization (%)", f"{avg_utilization:.2f}%")
 
-    col1.metric("Total Spend", f"{total_spend:,.2f}")
-    col2.metric("Expected Spend", f"{expected_spend:,.2f} ")
+#     col1.metric("Total Spend", f"{total_spend:,.2f}")
+#     col2.metric("Expected Spend", f"{expected_spend:,.2f} ")
 
-    # Define filter categories
-    no_adspends = filtered_df[filtered_df['adspends_added'] == 0].reset_index(drop=True)
-    need_attention = filtered_df[filtered_df['actual_td_util'] < 30].reset_index(drop=True)
-    potential_upgrade = filtered_df[filtered_df['actual_td_util'] > 70].reset_index(drop=True)
-    upcoming_renewals = filtered_df[filtered_df['sub_end'] <= date.today() + timedelta(days=7)].reset_index(drop=True)
+#     # Define filter categories
+#     no_adspends = filtered_df[filtered_df['adspends_added'] == 0].reset_index(drop=True)
+#     need_attention = filtered_df[filtered_df['actual_td_util'] < 30].reset_index(drop=True)
+#     potential_upgrade = filtered_df[filtered_df['actual_td_util'] > 70].reset_index(drop=True)
+#     upcoming_renewals = filtered_df[filtered_df['sub_end'] <= date.today() + timedelta(days=7)].reset_index(drop=True)
 
-    #All the active accounts
-    st.subheader("Active Subscriptions")
-    st.metric("Number of Accounts", filtered_df.shape[0])
-    st.dataframe(filtered_df)
+#     #All the active accounts
+#     st.subheader("Active Subscriptions")
+#     st.metric("Number of Accounts", filtered_df.shape[0])
+#     st.dataframe(filtered_df)
 
-    # Display the number of accounts per category with metrics
-    st.header("Account Divisions")
+#     # Display the number of accounts per category with metrics
+#     st.header("Account Divisions")
 
-    # Categories metrics display
-    st.subheader("Subscription with No Adspends")
-    st.metric("Number of Accounts", no_adspends.shape[0])
-    st.dataframe(no_adspends)
+#     # Categories metrics display
+#     st.subheader("Subscription with No Adspends")
+#     st.metric("Number of Accounts", no_adspends.shape[0])
+#     st.dataframe(no_adspends)
 
-    st.subheader("Ad Accounts that Need Attention")
-    st.metric("Number of Accounts", need_attention.shape[0])
-    st.dataframe(need_attention)
+#     st.subheader("Ad Accounts that Need Attention")
+#     st.metric("Number of Accounts", need_attention.shape[0])
+#     st.dataframe(need_attention)
 
-    st.subheader("Potential Upgrades")
-    st.metric("Number of Accounts", potential_upgrade.shape[0])
-    st.dataframe(potential_upgrade)
+#     st.subheader("Potential Upgrades")
+#     st.metric("Number of Accounts", potential_upgrade.shape[0])
+#     st.dataframe(potential_upgrade)
 
-    st.subheader("Upcoming Renewals")
-    st.metric("Number of Accounts", upcoming_renewals.shape[0])
-    st.dataframe(upcoming_renewals)
+#     st.subheader("Upcoming Renewals")
+#     st.metric("Number of Accounts", upcoming_renewals.shape[0])
+#     st.dataframe(upcoming_renewals)
     
 
 elif selected == "Euid - adaccount mapping" and st.session_state.status == "verified":
@@ -1832,3 +1597,91 @@ elif selected == "Stripe Transaction" and st.session_state.status == "verified":
                     st.dataframe(df)
         else:
             st.warning("Please enter a valid email address.")
+
+
+elif selected == "Summary" and st.session_state.status == "verified":
+
+
+    bm = st.selectbox("Choose BM", ["All", "IND BM", "US BM"], index=0)
+
+    if bm=="IND BM":
+        df = df[df['currency_code'] == "INR"]
+    if bm=="US BM":
+        df = df[df['currency_code'] != "INR"]
+
+    df['dt'] = pd.to_datetime(df['dt']).dt.date
+
+
+    # Define date ranges
+    today = datetime.now()
+    yesterday = today - timedelta(days=1)
+    last_7_days = today - timedelta(days=7)
+    last_14_days = today - timedelta(days=14)
+    last_30_days = today - timedelta(days=30)
+    start_of_month = today.replace(day=1)
+    start_of_last_month = (start_of_month - timedelta(days=1)).replace(day=1)
+    end_of_last_month = start_of_month - timedelta(days=1)
+    start_of_quarter = start_of_month.replace(month=((today.month - 1) // 3) * 3 + 1, day=1)
+    start_of_year = today.replace(month=1, day=1)
+
+    print("Today:", today.date())
+    print("Yesterday:", yesterday.date())
+    print("Last 7 Days:", last_7_days.date())
+    print("Last 14 Days:", last_14_days.date())
+    print("Last 30 Days:", last_30_days.date())
+    print("Start of Month:", start_of_month.date())
+    print("Start of Last Month:", start_of_last_month.date())
+    print("End of Last Month:", end_of_last_month.date())
+    print("Start of Quarter:", start_of_quarter.date())
+    print("Start of Year:", start_of_year.date())
+
+    # Helper function to calculate spend for a specific date range
+    def calculate_spend(df, start_date, end_date=None):
+        if end_date:
+            return df[(df['dt'] >= pd.to_datetime(start_date).date()) & (df['dt'] <= pd.to_datetime(end_date).date())]['spend'].sum()
+        return df[df['dt'] >= pd.to_datetime(start_date).date()]['spend'].sum()
+    
+    # Aggregate spend data
+    aggregated_data = []
+    for key, group in df.groupby(['business_name', 'company_name', 'ad_account_name', 'business_manager_name', 'ad_account_id','currency_code']):
+        business_name, company_name, ad_account_name, business_manager_name, ad_account_id,currency_code = key
+        latest_dt = group['dt'].max()
+        
+        aggregated_data.append({
+            'Business Name': business_name,
+            'Company Name': company_name,
+            'Ad Account Name': ad_account_name,
+            'Business Manager Name': business_manager_name,
+            'Ad Account ID': ad_account_id,
+            'Currency': currency_code,
+            'Latest Date': latest_dt,
+            'Lifetime Spend': group['spend'].sum(),
+            'This Year': calculate_spend(group, start_of_year),
+            'This Quarter': calculate_spend(group, start_of_quarter),
+            'This Month': calculate_spend(group, start_of_month),
+            'Last Month': calculate_spend(group, start_of_last_month, end_of_last_month),
+            'Yesterday': calculate_spend(group, yesterday,yesterday),
+            'Last 7 Days': calculate_spend(group, last_7_days),
+            'Last 14 Days': calculate_spend(group, last_14_days),
+            'Last 30 Days': calculate_spend(group, last_30_days),
+        })
+
+    # Create a new DataFrame for the summarized data
+    summary_df = pd.DataFrame(aggregated_data).sort_values(by='This Year', ascending=False)
+    summary_df = summary_df.merge(disabled_account_df[['ad_account_id', 'flag']], left_on='Ad Account ID',right_on='ad_account_id', how='left')
+    summary_df['flag'] = summary_df['flag'].fillna('Active')
+    # Move the flag column next to the currency column
+    cols = list(summary_df.columns)
+    cols.insert(5, cols.pop(cols.index('flag')))
+
+    #drop ad_account_id column
+    cols = [col for col in cols if col != 'ad_account_id']
+
+    summary_df = summary_df[cols]
+
+    # Streamlit App
+    st.title("Meta Spend Summary")
+
+    st.write(f"{bm} Spend Summary")
+    st.dataframe(summary_df)
+

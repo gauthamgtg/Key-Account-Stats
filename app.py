@@ -273,51 +273,51 @@ order by 3
 where flag !='Others'
 '''
 
-datong_api_query='''
+# datong_api_query='''
 
-SELECT (euid::float)euid,ad_account_name,aas.ad_account_id,currency_code,aas.dt,spend,total_spend
-,(spend/total_spend)*100 as per
-from
-(select euid,date(date_start)dt,ad_account_id,spend as total_spend from ad_account_spends )aas
-left join 
-(
-select
-ggci.ad_account_id,ggci.currency as currency_code,date(date_start) as dt,account_name as ad_account_name,SUM(ggci.spend)spend
-FROM
-    zocket_global.campaigns c
-    join zocket_global.fb_campaigns gc on gc.app_campaign_id = c.id 
-    join zocket_global.fb_adsets fbadset on gc.id = fbadset.campaign_id
-    join zocket_global.fb_ads fbads on fbadset.id = fbads.adset_id
-    join zocket_global.fb_ads_age_gender_metrics_v3 ggci on ggci.ad_id = fbads.ad_id
-where date(date_start)>='2024-01-01'
-and c.imported_at is null
-group by 1,2,3,4
-)ai
-on aas.ad_account_id=ai.ad_account_id AND date(aas.dt)=date(ai.dt)
-where aas.ad_account_id in (
-    'act_517235807318296',
-        'act_331025229860027',
-        'act_1026427545158424',
-        'act_818603109556933',
-        'act_245995025197404',
-        'act_3592100964402439',
-        'act_3172162799744723',
-        'act_1980162379033639',
-        'act_1364907264123936',
-        'act_749694046972238',
-        'act_1841833786300802',
-        'act_206144919151515',
-        'act_324812700362567',
-        'act_3505294363025995',
-        'act_7780020542024454',
-        'act_650302000225354',
-        'act_1769761460112751',
-        'act_659696249436257',
-        'act_1729204737559911',
-        'act_383479978116390',
-        'act_1729204737559911'
-)
-'''
+# SELECT (euid::float)euid,ad_account_name,aas.ad_account_id,currency_code,aas.dt,spend,total_spend
+# ,(spend/total_spend)*100 as per
+# from
+# (select euid,date(date_start)dt,ad_account_id,spend as total_spend from ad_account_spends )aas
+# left join 
+# (
+# select
+# ggci.ad_account_id,ggci.currency as currency_code,date(date_start) as dt,account_name as ad_account_name,SUM(ggci.spend)spend
+# FROM
+#     zocket_global.campaigns c
+#     join zocket_global.fb_campaigns gc on gc.app_campaign_id = c.id 
+#     join zocket_global.fb_adsets fbadset on gc.id = fbadset.campaign_id
+#     join zocket_global.fb_ads fbads on fbadset.id = fbads.adset_id
+#     join zocket_global.fb_ads_age_gender_metrics_v3 ggci on ggci.ad_id = fbads.ad_id
+# where date(date_start)>='2024-01-01'
+# and c.imported_at is null
+# group by 1,2,3,4
+# )ai
+# on aas.ad_account_id=ai.ad_account_id AND date(aas.dt)=date(ai.dt)
+# where aas.ad_account_id in (
+#     'act_517235807318296',
+#         'act_331025229860027',
+#         'act_1026427545158424',
+#         'act_818603109556933',
+#         'act_245995025197404',
+#         'act_3592100964402439',
+#         'act_3172162799744723',
+#         'act_1980162379033639',
+#         'act_1364907264123936',
+#         'act_749694046972238',
+#         'act_1841833786300802',
+#         'act_206144919151515',
+#         'act_324812700362567',
+#         'act_3505294363025995',
+#         'act_7780020542024454',
+#         'act_650302000225354',
+#         'act_1769761460112751',
+#         'act_659696249436257',
+#         'act_1729204737559911',
+#         'act_383479978116390',
+#         'act_1729204737559911'
+# )
+# '''
 
 
 
@@ -339,7 +339,7 @@ list_df = execute_query(query=list_query)
 # ai_spends_df = execute_query(query=ai_spends_query)
 ai_campaign_spends_df = execute_query(query=zocket_ai_campaigns_spends_query)
 disabled_account_df = execute_query(query=disabled_account_query)
-datong_api_df = execute_query(query=datong_api_query) 
+# datong_api_df = execute_query(query=datong_api_query) 
 
 
 # Load the CSV file
@@ -420,21 +420,21 @@ current_year = datetime.now().year
 df = df[df['dt'] != date.today()]
 
 #datong df
-datong_api_df['dt'] = pd.to_datetime(datong_api_df['dt']).dt.date
-datong_api_df['spend'] = pd.to_numeric(datong_api_df['spend'], errors='coerce')
-datong_api_df['euid'] = pd.to_numeric(datong_api_df['euid'], errors='coerce')
-datong_api_df['total_spend'] = pd.to_numeric(datong_api_df['total_spend'], errors='coerce')
-datong_api_df['per'] = pd.to_numeric(datong_api_df['per'], errors='coerce')
+# datong_api_df['dt'] = pd.to_datetime(datong_api_df['dt']).dt.date
+# datong_api_df['spend'] = pd.to_numeric(datong_api_df['spend'], errors='coerce')
+# datong_api_df['euid'] = pd.to_numeric(datong_api_df['euid'], errors='coerce')
+# datong_api_df['total_spend'] = pd.to_numeric(datong_api_df['total_spend'], errors='coerce')
+# datong_api_df['per'] = pd.to_numeric(datong_api_df['per'], errors='coerce')
 
 
-#removed revenue analysis, "AI account spends"
-
+#removed revenue analysis, "AI account spends","Datong API VS Total Spends",
+# "joystick"
 #Sidebar
 with st.sidebar:
     selected = option_menu(
         menu_title="Navigation",  # Required
-        options=["Login","Key Account Stats", "Raw Data","Overall Stats - Ind","Overall Stats - US","Euid - adaccount mapping","Top accounts","FB API Campaign spends","Disabled Ad Accounts","Datong API VS Total Spends","Stripe Transaction","Summary","BM Summary"],  # Required
-        icons=["lock","airplane-engines", "table","currency-rupee",'currency-dollar','link',"graph-up","suit-spade","slash-circle","joystick","credit-card-2-front-fill","book","book-fill"],  # Optional: icons from the Bootstrap library
+        options=["Login","Key Account Stats", "Raw Data","Overall Stats - Ind","Overall Stats - US","Euid - adaccount mapping","Top accounts","FB API Campaign spends","Disabled Ad Accounts","Stripe Transaction","Summary","BM Summary"],  # Required
+        icons=["lock","airplane-engines", "table","currency-rupee",'currency-dollar','link',"graph-up","suit-spade","slash-circle","credit-card-2-front-fill","book","book-fill"],  # Optional: icons from the Bootstrap library
         menu_icon="cast",  # Optional: main menu icon
         default_index=0,  # Default active menu item
     )
@@ -625,10 +625,8 @@ elif selected == "Raw Data" and st.session_state.status == "verified":
 
     st.write("roposo acc list dump")
     st.dataframe(roposo_acc_list_df, use_container_width=True)
-    st.write("tes")
-    st.dataframe(df, use_container_width=True)
 
-    st.write("Enterprise spends raw dump")
+    st.write("Ad spends raw dump")
     st.dataframe(df, use_container_width=True)
 
     # st.write("Subscriptions raw dump")
@@ -1371,7 +1369,7 @@ elif selected == "Disabled Ad Accounts" and st.session_state.status == "verified
 
     disabled_account_df = disabled_account_df.sort_values(by='disable_date', ascending=False)
 
-    # st.dataframe(disabled_account_df, use_container_width=True)
+    st.dataframe(disabled_account_df, use_container_width=True)
 
     flag = st.selectbox("Select Disabled/Reactived", ("Disabled", "Reactivated"))
 
@@ -1388,133 +1386,133 @@ elif selected == "Disabled Ad Accounts" and st.session_state.status == "verified
     st.dataframe(disabled_account_df, use_container_width=True)
 
 
-elif selected == "Datong API VS Total Spends" and st.session_state.status == "verified":
+# elif selected == "Datong API VS Total Spends" and st.session_state.status == "verified":
 
-    st.title("Datong API VS Total Spends")
+#     st.title("Datong API VS Total Spends")
 
-    #warning message if currency contains other than inr
-    if not datong_api_df['currency_code'].eq('INR').all():
-        st.write("Warning: Currency column contains other than INR")
+#     #warning message if currency contains other than inr
+#     if not datong_api_df['currency_code'].eq('INR').all():
+#         st.write("Warning: Currency column contains other than INR")
 
-    datong_api_df['dt'] = pd.to_datetime(datong_api_df['dt'])
+#     datong_api_df['dt'] = pd.to_datetime(datong_api_df['dt'])
 
-    st.dataframe(datong_api_df, use_container_width=True)
+#     st.dataframe(datong_api_df, use_container_width=True)
 
-    #group by choosing date
-    grouping = st.selectbox('Choose Grouping', ['Year', 'Month', 'Week', 'Date'], index=1)
+#     #group by choosing date
+#     grouping = st.selectbox('Choose Grouping', ['Year', 'Month', 'Week', 'Date'], index=1)
 
-    # Assuming your 'dt' column is already in date format (e.g., YYYY-MM-DD)
-    if grouping == 'Year':
-        datong_api_df.loc[:, 'grouped_date'] = datong_api_df['dt'].apply(lambda x: x.strftime('%Y'))  # Year format as 2024
-    elif grouping == 'Month':
-        datong_api_df.loc[:, 'grouped_date'] = datong_api_df['dt'].apply(lambda x: x.strftime('%b-%y'))  # Month format as Jan-24
-    elif grouping == 'Week':
-        datong_api_df.loc[:, 'grouped_date'] = datong_api_df['dt'].apply(lambda x: f"{x.strftime('%Y')} - week {x.isocalendar()[1]}")  # Week format as 2024 - week 24
-    else:
-        datong_api_df.loc[:, 'grouped_date'] = datong_api_df['dt']  # Just use the date as is (in date format)
+#     # Assuming your 'dt' column is already in date format (e.g., YYYY-MM-DD)
+#     if grouping == 'Year':
+#         datong_api_df.loc[:, 'grouped_date'] = datong_api_df['dt'].apply(lambda x: x.strftime('%Y'))  # Year format as 2024
+#     elif grouping == 'Month':
+#         datong_api_df.loc[:, 'grouped_date'] = datong_api_df['dt'].apply(lambda x: x.strftime('%b-%y'))  # Month format as Jan-24
+#     elif grouping == 'Week':
+#         datong_api_df.loc[:, 'grouped_date'] = datong_api_df['dt'].apply(lambda x: f"{x.strftime('%Y')} - week {x.isocalendar()[1]}")  # Week format as 2024 - week 24
+#     else:
+#         datong_api_df.loc[:, 'grouped_date'] = datong_api_df['dt']  # Just use the date as is (in date format)
 
-    today = datetime.now().date()
-    yesterday = today - timedelta(days=1)
+#     today = datetime.now().date()
+#     yesterday = today - timedelta(days=1)
 
-    today_api_spend = datong_api_df[datong_api_df['dt'] == today]['spend'].sum()
-    today_tot_spend = datong_api_df[datong_api_df['dt'] == today]['total_spend'].sum() 
-    per_today_spend= (today_api_spend/today_tot_spend)*100
+#     today_api_spend = datong_api_df[datong_api_df['dt'] == today]['spend'].sum()
+#     today_tot_spend = datong_api_df[datong_api_df['dt'] == today]['total_spend'].sum() 
+#     per_today_spend= (today_api_spend/today_tot_spend)*100
 
-    Overall_api_spend = datong_api_df['spend'].sum()
-    Overall_tot_spend = datong_api_df['total_spend'].sum() 
-    per_ovr_spend = (Overall_api_spend/Overall_tot_spend)*100
+#     Overall_api_spend = datong_api_df['spend'].sum()
+#     Overall_tot_spend = datong_api_df['total_spend'].sum() 
+#     per_ovr_spend = (Overall_api_spend/Overall_tot_spend)*100
 
-    # Yesterday's api Spend
-    yesterday_api_spend = datong_api_df[datong_api_df['dt'].dt.date == yesterday]['spend'].sum()
-    day_before_yesterday_api_spend = datong_api_df[datong_api_df['dt'].dt.date == day_before_yst]['spend'].sum()
+#     # Yesterday's api Spend
+#     yesterday_api_spend = datong_api_df[datong_api_df['dt'].dt.date == yesterday]['spend'].sum()
+#     day_before_yesterday_api_spend = datong_api_df[datong_api_df['dt'].dt.date == day_before_yst]['spend'].sum()
     
 
-    # Yesterday's total Spend
-    yesterday_total_spend = datong_api_df[datong_api_df['dt'].dt.date == yesterday]['total_spend'].sum()
-    day_before_yesterday_total_spend = datong_api_df[datong_api_df['dt'].dt.date == day_before_yst]['total_spend'].sum()
+#     # Yesterday's total Spend
+#     yesterday_total_spend = datong_api_df[datong_api_df['dt'].dt.date == yesterday]['total_spend'].sum()
+#     day_before_yesterday_total_spend = datong_api_df[datong_api_df['dt'].dt.date == day_before_yst]['total_spend'].sum()
 
-    per_yst_spend = (yesterday_api_spend/yesterday_total_spend)*100
-    per_day_before_yesterday_spend = (day_before_yesterday_api_spend/day_before_yesterday_total_spend)*100
+#     per_yst_spend = (yesterday_api_spend/yesterday_total_spend)*100
+#     per_day_before_yesterday_spend = (day_before_yesterday_api_spend/day_before_yesterday_total_spend)*100
 
-    # Spend Change from Yesterday
-    tdy_spend_change = ((today_api_spend - yesterday_api_spend) / yesterday_api_spend * 100) if yesterday_api_spend != 0 else 0
-    spend_change = ((yesterday_api_spend - day_before_yesterday_api_spend) / day_before_yesterday_api_spend * 100) if day_before_yesterday_api_spend != 0 else 0
+#     # Spend Change from Yesterday
+#     tdy_spend_change = ((today_api_spend - yesterday_api_spend) / yesterday_api_spend * 100) if yesterday_api_spend != 0 else 0
+#     spend_change = ((yesterday_api_spend - day_before_yesterday_api_spend) / day_before_yesterday_api_spend * 100) if day_before_yesterday_api_spend != 0 else 0
 
-    # Spend Change from Yesterday
-    tdy_spend_change = ((today_tot_spend - yesterday_total_spend) / yesterday_total_spend * 100) if yesterday_total_spend != 0 else 0
-    spend_change = ((yesterday_total_spend - day_before_yesterday_total_spend) / day_before_yesterday_total_spend * 100) if day_before_yesterday_total_spend != 0 else 0
+#     # Spend Change from Yesterday
+#     tdy_spend_change = ((today_tot_spend - yesterday_total_spend) / yesterday_total_spend * 100) if yesterday_total_spend != 0 else 0
+#     spend_change = ((yesterday_total_spend - day_before_yesterday_total_spend) / day_before_yesterday_total_spend * 100) if day_before_yesterday_total_spend != 0 else 0
 
-    # Current Month Spend
-    current_month_api_spend = datong_api_df[datong_api_df['dt'].dt.to_period("M") == today.strftime("%Y-%m")]['spend'].sum()
-    current_month_total_spend = datong_api_df[datong_api_df['dt'].dt.to_period("M") == today.strftime("%Y-%m")]['total_spend'].sum()
-    per_current_month_spend = (current_month_api_spend/current_month_total_spend)*100
+#     # Current Month Spend
+#     current_month_api_spend = datong_api_df[datong_api_df['dt'].dt.to_period("M") == today.strftime("%Y-%m")]['spend'].sum()
+#     current_month_total_spend = datong_api_df[datong_api_df['dt'].dt.to_period("M") == today.strftime("%Y-%m")]['total_spend'].sum()
+#     per_current_month_spend = (current_month_api_spend/current_month_total_spend)*100
 
-    # Last Month Spend
-    last_month = (today.replace(day=1) - timedelta(days=1)).strftime("%Y-%m")
-    last_month_api_spend = datong_api_df[datong_api_df['dt'].dt.to_period("M") == last_month]['spend'].sum()
-    last_month_total_spend = datong_api_df[datong_api_df['dt'].dt.to_period("M") == last_month]['total_spend'].sum()
-    per_last_month_spend = (last_month_api_spend/last_month_total_spend)*100
+#     # Last Month Spend
+#     last_month = (today.replace(day=1) - timedelta(days=1)).strftime("%Y-%m")
+#     last_month_api_spend = datong_api_df[datong_api_df['dt'].dt.to_period("M") == last_month]['spend'].sum()
+#     last_month_total_spend = datong_api_df[datong_api_df['dt'].dt.to_period("M") == last_month]['total_spend'].sum()
+#     per_last_month_spend = (last_month_api_spend/last_month_total_spend)*100
 
-    # Number of Active Ad Accounts
-    active_ad_accounts = datong_api_df['ad_account_id'].nunique()
+#     # Number of Active Ad Accounts
+#     active_ad_accounts = datong_api_df['ad_account_id'].nunique()
 
-     # Get today's date to identify the current and last month
-    today = datetime.now().date()
-    current_month_period = today.strftime("%Y-%m")  # e.g., "2024-10"
-    last_month_period = (today.replace(day=1) - timedelta(days=1)).strftime("%Y-%m")  # Previous month in "YYYY-MM" format
+#      # Get today's date to identify the current and last month
+#     today = datetime.now().date()
+#     current_month_period = today.strftime("%Y-%m")  # e.g., "2024-10"
+#     last_month_period = (today.replace(day=1) - timedelta(days=1)).strftime("%Y-%m")  # Previous month in "YYYY-MM" format
 
-    # Filter for current month
-    current_month_data = datong_api_df[datong_api_df['dt'].dt.to_period("M") == current_month_period]
-    # Filter for last month
-    last_month_data = datong_api_df[datong_api_df['dt'].dt.to_period("M") == last_month_period]
-
-
-    col1, col2, col3 = st.columns(3)
-
-    # Display Metrics
-    col1.metric("Overall API Spend (YTD)", f"₹{Overall_api_spend:,.2f}")
-    col2.metric("Overall Total Spend (YTD)", f"₹{Overall_tot_spend:,.2f}")
-    col3.metric("Percentage of Overall Spend (YTD)", f"{per_ovr_spend:,.2f}%")
-    # col1.metric("Today's Spend", f"${today_spend:,.2f}",f"{tdy_spend_change:,.2f}%")
+#     # Filter for current month
+#     current_month_data = datong_api_df[datong_api_df['dt'].dt.to_period("M") == current_month_period]
+#     # Filter for last month
+#     last_month_data = datong_api_df[datong_api_df['dt'].dt.to_period("M") == last_month_period]
 
 
-    col1.metric("Today API Spend", f"₹{today_api_spend:,.2f}")
-    col2.metric("Today Total Spend", f"₹{today_tot_spend:,.2f}")
-    col3.metric("Percentage of Today Spend", f"{per_today_spend:,.2f}%")
+#     col1, col2, col3 = st.columns(3)
+
+#     # Display Metrics
+#     col1.metric("Overall API Spend (YTD)", f"₹{Overall_api_spend:,.2f}")
+#     col2.metric("Overall Total Spend (YTD)", f"₹{Overall_tot_spend:,.2f}")
+#     col3.metric("Percentage of Overall Spend (YTD)", f"{per_ovr_spend:,.2f}%")
+#     # col1.metric("Today's Spend", f"${today_spend:,.2f}",f"{tdy_spend_change:,.2f}%")
+
+
+#     col1.metric("Today API Spend", f"₹{today_api_spend:,.2f}")
+#     col2.metric("Today Total Spend", f"₹{today_tot_spend:,.2f}")
+#     col3.metric("Percentage of Today Spend", f"{per_today_spend:,.2f}%")
     
-    col1.metric("Yesterday API Spend", f"₹{yesterday_api_spend:,.2f}",f"{spend_change:,.2f}%")
-    col2.metric("Yesterday Total Spend", f"₹{yesterday_total_spend:,.2f}",f"{spend_change:,.2f}%")
-    col3.metric("Percentage of Yesterday Spend", f"{per_yst_spend:,.2f}%")
+#     col1.metric("Yesterday API Spend", f"₹{yesterday_api_spend:,.2f}",f"{spend_change:,.2f}%")
+#     col2.metric("Yesterday Total Spend", f"₹{yesterday_total_spend:,.2f}",f"{spend_change:,.2f}%")
+#     col3.metric("Percentage of Yesterday Spend", f"{per_yst_spend:,.2f}%")
 
 
-    col1.metric("API Current Month Spend", f"₹{current_month_api_spend:,.2f}")
-    col2.metric("Total Current Month Spend", f"₹{current_month_total_spend:,.2f}")
-    col3.metric("Percentage of Current Month Spend", f"{per_current_month_spend:,.2f}%")
+#     col1.metric("API Current Month Spend", f"₹{current_month_api_spend:,.2f}")
+#     col2.metric("Total Current Month Spend", f"₹{current_month_total_spend:,.2f}")
+#     col3.metric("Percentage of Current Month Spend", f"{per_current_month_spend:,.2f}%")
 
 
-    col1.metric("Last Month Spend", f"₹{last_month_api_spend:,.2f}")
-    col2.metric("Last Month Spend", f"₹{last_month_total_spend:,.2f}")
-    col3.metric("Percentage of Last Month Spend", f"{per_last_month_spend:,.2f}%")
+#     col1.metric("Last Month Spend", f"₹{last_month_api_spend:,.2f}")
+#     col2.metric("Last Month Spend", f"₹{last_month_total_spend:,.2f}")
+#     col3.metric("Percentage of Last Month Spend", f"{per_last_month_spend:,.2f}%")
 
-    # col2.metric("Active Ad Accounts", active_ad_accounts)
+#     # col2.metric("Active Ad Accounts", active_ad_accounts)
 
-    # Aggregate the spend values by the selected grouping
-    grouped_df = datong_api_df.groupby(['ad_account_id','ad_account_name','grouped_date'])[['spend','total_spend']].sum().reset_index()
+#     # Aggregate the spend values by the selected grouping
+#     grouped_df = datong_api_df.groupby(['ad_account_id','ad_account_name','grouped_date'])[['spend','total_spend']].sum().reset_index()
 
-    st.line_chart(grouped_df, x='grouped_date', y=['spend', 'total_spend'])
+#     st.line_chart(grouped_df, x='grouped_date', y=['spend', 'total_spend'])
    
-    # Display grouped data
-    st.header(f"Spend Data Ad Account Level- {grouping}")
-    pivot_df = grouped_df.pivot(index=['ad_account_name','ad_account_id'], columns='grouped_date', values=['spend','total_spend'])
+#     # Display grouped data
+#     st.header(f"Spend Data Ad Account Level- {grouping}")
+#     pivot_df = grouped_df.pivot(index=['ad_account_name','ad_account_id'], columns='grouped_date', values=['spend','total_spend'])
 
     
 
-    # st.dataframe(grouped_df, use_container_width=True)
-    st.dataframe(pivot_df, use_container_width=True)
+#     # st.dataframe(grouped_df, use_container_width=True)
+#     st.dataframe(pivot_df, use_container_width=True)
     
-    # Display full table
-    st.header("Full Table")
-    st.dataframe(datong_api_df, use_container_width=True)
+#     # Display full table
+#     st.header("Full Table")
+#     st.dataframe(datong_api_df, use_container_width=True)
 
    
 
@@ -1755,7 +1753,8 @@ elif selected == "BM Summary" and st.session_state.status == "verified":
     ind_df = df[df['currency_code'] == 'INR']
     us_df = df[df['currency_code'] != 'INR']
 
-    yesterday = pd.to_datetime('today') - pd.Timedelta(days=1)
+    yesterday = (date.today() - timedelta(days=1))
+    print(yesterday)
 
     ind_yesterday = ind_df[ind_df['dt'] == yesterday]['spend'].sum()
     us_yesterday = us_df[us_df['dt'] == yesterday]['spend_in_usd'].sum()
@@ -1774,3 +1773,8 @@ elif selected == "BM Summary" and st.session_state.status == "verified":
     col2.metric("US BM This Month", f"${us_current_month:}")
     col3.metric("IND BM Avg Spend", f"₹{ind_avg_spend:}")
     col3.metric("US BM Avg Spend", f"${us_avg_spend:}")
+
+    st.line_chart(df.groupby('dt').sum()['spend_in_usd'])
+
+    st.line_chart(ind_df.groupby('dt').sum()['spend'])
+    st.line_chart(us_df.groupby('dt').sum()['spend_in_usd'])

@@ -356,7 +356,7 @@ top_customers_flag = []
 for index, row in df.iterrows():
     if row['ad_account_id'] in datong_acc_list_df.values:
         top_customers_flag.append('Datong')
-    elif row['ad_account_id'] in roposo_acc_list_df.values:
+    elif row['dt'] >= datetime(2024, 9, 30).date() and row['ad_account_id'] in roposo_acc_list_df.values:
         top_customers_flag.append('Roposo')
     else:
         top_customers_flag.append('Others')
@@ -516,7 +516,10 @@ if selected == "Key Account Stats" and st.session_state.status == "verified":
     # Filter data for yesterday and day before yesterday
     yesterday_data = filtered_df[filtered_df['dt'] == yesterday]
     day_before_yst_data = filtered_df[filtered_df['dt'] == day_before_yst]
-    last_month_df = filtered_df[(filtered_df['dt'].apply(pd.to_datetime).dt.month == current_month-1) & (filtered_df['dt'].apply(pd.to_datetime).dt.year == current_year)]
+    if current_month == 1:
+        last_month_df = filtered_df[(pd.to_datetime(filtered_df['dt']).dt.month == 12) & (pd.to_datetime(filtered_df['dt']).dt.year == current_year-1)]
+    else:
+        last_month_df = filtered_df[(pd.to_datetime(filtered_df['dt']).dt.month == current_month-1) & (pd.to_datetime(filtered_df['dt']).dt.year == current_year)]
 
     # Calculate the total spend for each day
     yst_spend = yesterday_data['spend'].sum().round().astype(int)
@@ -1369,7 +1372,7 @@ elif selected == "Disabled Ad Accounts" and st.session_state.status == "verified
 
     disabled_account_df = disabled_account_df.sort_values(by='disable_date', ascending=False)
 
-    st.dataframe(disabled_account_df, use_container_width=True)
+    # st.dataframe(disabled_account_df, use_container_width=True)
 
     flag = st.selectbox("Select Disabled/Reactived", ("Disabled", "Reactivated"))
 
@@ -1752,7 +1755,6 @@ elif selected == "BM Summary" and st.session_state.status == "verified":
 
     ind_df = df[df['currency_code'] == 'INR']
     us_df = df[df['currency_code'] != 'INR']
-
     yesterday = (date.today() - timedelta(days=1))
     print(yesterday)
 
@@ -1762,19 +1764,29 @@ elif selected == "BM Summary" and st.session_state.status == "verified":
     ind_current_month = ind_df[pd.to_datetime(ind_df['dt']).dt.to_period('M') == pd.to_datetime('today').to_period('M')]['spend'].sum()
     us_current_month = us_df[pd.to_datetime(us_df['dt']).dt.to_period('M') == pd.to_datetime('today').to_period('M')]['spend_in_usd'].sum()
     
-    ind_avg_spend = int(ind_current_month / (yesterday.day - 1))
-    us_avg_spend = int(us_current_month / (yesterday.day - 1))
+    ind_avg_spend = int(ind_current_month / (yesterday.day - 1)) if yesterday.day > 1 else 0
+    us_avg_spend = int(us_current_month / (yesterday.day - 1)) if yesterday.day > 1 else 0
 
-    col1, col2, col3 = st.columns(3)
+    ind_last_month_spend = ind_df[pd.to_datetime(ind_df['dt']).dt.to_period('M') == (pd.to_datetime('today') - pd.DateOffset(months=1)).to_period('M')]['spend'].sum() 
+    us_last_month_spend = us_df[pd.to_datetime(us_df['dt']).dt.to_period('M') == (pd.to_datetime('today') - pd.DateOffset(months=1)).to_period('M')]['spend_in_usd'].sum()
+    
+    ind_yesterday_increase = (ind_yesterday - ind_df[ind_df['dt'] == (yesterday - timedelta(days=1))]['spend'].sum()) / ind_df[ind_df['dt'] == (yesterday - timedelta(days=1))]['spend'].sum() * 100
+    us_yesterday_increase = (us_yesterday - us_df[us_df['dt'] == (yesterday - timedelta(days=1))]['spend_in_usd'].sum()) / us_df[us_df['dt'] == (yesterday - timedelta(days=1))]['spend_in_usd'].sum() * 100
+    
+    col1, col2, col3,col4 = st.columns(4)
 
-    col1.metric("IND BM Yesterday", f"₹{ind_yesterday:}")
-    col1.metric("US BM Yesterday", f"${us_yesterday:}")
+    col1.metric("IND BM Yesterday", f"₹{ind_yesterday:}", f"{ind_yesterday_increase:.2f}%")
+    col1.metric("US BM Yesterday", f"${us_yesterday:}", f"{us_yesterday_increase:.2f}%")
     col2.metric("IND BM This Month", f"₹{ind_current_month:}")
     col2.metric("US BM This Month", f"${us_current_month:}")
-    col3.metric("IND BM Avg Spend", f"₹{ind_avg_spend:}")
-    col3.metric("US BM Avg Spend", f"${us_avg_spend:}")
+    col3.metric("IND BM Current Month Avg Spend", f"₹{ind_avg_spend:}")
+    col3.metric("US BM Current Month Avg Spend", f"${us_avg_spend:}")
+    col4.metric("IND BM Last Month", f"₹{ind_last_month_spend:}")
+    col4.metric("US BM Last Month", f"${us_last_month_spend:}")
+    # col4.metric("IND BM MoM Increase", f"{ind_mom_increase:.2f}%")
+    # col4.metric("US BM MoM Increase", f"{us_mom_increase:.2f}%")
 
-    st.line_chart(df.groupby('dt').sum()['spend_in_usd'])
+    # st.line_chart(df.groupby('dt').sum()['spend_in_usd'])
 
-    st.line_chart(ind_df.groupby('dt').sum()['spend'])
-    st.line_chart(us_df.groupby('dt').sum()['spend_in_usd'])
+    # st.line_chart(ind_df.groupby('dt').sum()['spend'])
+    # st.line_chart(us_df.groupby('dt').sum()['spend_in_usd'])

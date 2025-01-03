@@ -500,6 +500,10 @@ if selected == "Key Account Stats" and st.session_state.status == "verified":
         # Step 2: Ask the customer to choose grouping (year, month, week, or date)
         grouping = st.selectbox('Choose Grouping', ['Year', 'Month', 'Week', 'Date'], index=1)
 
+    df = df.merge(disabled_account_df[['ad_account_id', 'flag']], on='ad_account_id', how='left')
+
+    df['flag'] = df['flag'].fillna('Active')
+
     # Filter the dataframe based on the selected top_customers_flag
     if selected_flag == "Others":
         filtered_df = df[df['euid'].isin(euids)]
@@ -560,8 +564,8 @@ if selected == "Key Account Stats" and st.session_state.status == "verified":
 
     #display pivot table
     st.header(f"Spend Data Ad Account Level- {grouping}")
-    grouped_df = filtered_df.groupby(['euid','ad_account_id','ad_account_name','business_manager_name','business_name','grouped_date'])[['spend']].sum().reset_index()
-    pivot_df = grouped_df.pivot(index=['euid','ad_account_id','ad_account_name','business_manager_name','business_name'], columns='grouped_date', values='spend')
+    grouped_df = filtered_df.groupby(['euid','ad_account_id','ad_account_name','business_manager_name','business_name','grouped_date','flag'])[['spend']].sum().reset_index()
+    pivot_df = grouped_df.pivot(index=['euid','ad_account_id','ad_account_name','business_manager_name','business_name','flag'], columns='grouped_date', values='spend')
         # Sort the columns by date
     if grouping == 'Year':
         pivot_df = pivot_df[sorted(pivot_df.columns, key=lambda x: pd.to_datetime(x, format='%Y'), reverse=True)]
@@ -575,11 +579,11 @@ if selected == "Key Account Stats" and st.session_state.status == "verified":
     st.dataframe(pivot_df, use_container_width=True)
 
 
-    yst_stats_df = filtered_df[filtered_df['dt'] == yesterday].groupby(['euid','ad_account_id','ad_account_name','business_manager_name','business_name'], as_index=False)['spend'].sum().sort_values(by='spend', ascending=False).reset_index(drop=True)
+    yst_stats_df = filtered_df[filtered_df['dt'] == yesterday].groupby(['euid','ad_account_id','ad_account_name','business_manager_name','business_name','flag'], as_index=False)['spend'].sum().sort_values(by='spend', ascending=False).reset_index(drop=True)
     yst_stats_df.index +=1
-    current_month_stats_df = filtered_df[filtered_df['dt'].apply(lambda x: x.month == current_month and x.year == current_year)].groupby(['euid','ad_account_id','ad_account_name','business_manager_name','business_name'], as_index=False)['spend'].sum().sort_values(by='spend', ascending=False).reset_index(drop=True)
+    current_month_stats_df = filtered_df[filtered_df['dt'].apply(lambda x: x.month == current_month and x.year == current_year)].groupby(['euid','ad_account_id','ad_account_name','business_manager_name','business_name','flag'], as_index=False)['spend'].sum().sort_values(by='spend', ascending=False).reset_index(drop=True)
     current_month_stats_df.index +=1
-    Overall_spend = filtered_df.groupby(['euid','ad_account_id','ad_account_name','business_manager_name','business_name'], as_index=False)['spend'].sum().sort_values(by='spend', ascending=False).reset_index(drop=True)
+    Overall_spend = filtered_df.groupby(['euid','ad_account_id','ad_account_name','business_manager_name','business_name','flag'], as_index=False)['spend'].sum().sort_values(by='spend', ascending=False).reset_index(drop=True)
     Overall_spend.index +=1
     
     st.write("Yesterday spend data:")
@@ -603,8 +607,8 @@ if selected == "Key Account Stats" and st.session_state.status == "verified":
     summary_df = summary_df.fillna(0)
     # print(summary_df.columns)
     # st.dataframe(summary_df, use_container_width=True)
-    summary_df = summary_df.groupby(['euid','ad_account_id','business_name','company_name','month','spend_yesterday','spend_curr_month','spend_total'])['spend'].sum().reset_index()
-    summary_df = summary_df.pivot(index=['euid','ad_account_id','business_name','company_name','spend_total','spend_curr_month','spend_yesterday'], columns='month', values='spend')
+    summary_df = summary_df.groupby(['euid','ad_account_id','business_name','company_name','flag','month','spend_yesterday','spend_curr_month','spend_total'])['spend'].sum().reset_index()
+    summary_df = summary_df.pivot(index=['euid','ad_account_id','business_name','company_name','flag','spend_total','spend_curr_month','spend_yesterday'], columns='month', values='spend')
 
 
     # Sort the columns by date
@@ -1286,9 +1290,9 @@ elif selected == "FB API Campaign spends" and st.session_state.status == "verifi
     col1.metric("Overall Spend (YTD)", f"${Overall_spend:,.2f}")
     # col1.metric("Today's Spend", f"${today_spend:,.2f}",f"{tdy_spend_change:,.2f}%")
     
-    col2.metric("Yesterday Spend", f"${yesterday_spend:.2f}",f"{spend_change:,.2f}%")
-    col1.metric("Current Month Spend", f"${current_month_spend:,.2f}")
-    col2.metric("Last Month Spend", f"${last_month_spend:,.2f}")
+    col2.metric("Yesterday Spend", f"${int(yesterday_spend):,}",f"{spend_change:,.2f}%")
+    col1.metric("Current Month Spend", f"${int(current_month_spend):,}")
+    col2.metric("Last Month Spend", f"${int(last_month_spend):,}")
     col1.metric("Average Spend per Account - Current Month", f"${avg_spend_current_month:,.2f}",f"{average_spend_change:.2f}%" if average_spend_change is not None else "N/A")
     col2.metric("Average Spend per Account - Last Month", f"${avg_spend_last_month:,.2f}")
     # col2.metric("Active Ad Accounts", active_ad_accounts)
@@ -1764,8 +1768,8 @@ elif selected == "BM Summary" and st.session_state.status == "verified":
     ind_current_month = ind_df[pd.to_datetime(ind_df['dt']).dt.to_period('M') == pd.to_datetime('today').to_period('M')]['spend'].sum()
     us_current_month = us_df[pd.to_datetime(us_df['dt']).dt.to_period('M') == pd.to_datetime('today').to_period('M')]['spend_in_usd'].sum()
     
-    ind_avg_spend = int(ind_current_month / (yesterday.day - 1)) if yesterday.day > 1 else 0
-    us_avg_spend = int(us_current_month / (yesterday.day - 1)) if yesterday.day > 1 else 0
+    ind_avg_spend = int(ind_current_month / (yesterday.day))
+    us_avg_spend = int(us_current_month / (yesterday.day))
 
     ind_last_month_spend = ind_df[pd.to_datetime(ind_df['dt']).dt.to_period('M') == (pd.to_datetime('today') - pd.DateOffset(months=1)).to_period('M')]['spend'].sum() 
     us_last_month_spend = us_df[pd.to_datetime(us_df['dt']).dt.to_period('M') == (pd.to_datetime('today') - pd.DateOffset(months=1)).to_period('M')]['spend_in_usd'].sum()

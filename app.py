@@ -1035,7 +1035,7 @@ elif selected == "Top accounts" and st.session_state.status == "verified":
         end_date = st.date_input("End Date", value=datetime.now())
 
     # Filter DataFrame by selected date range
-    filtered_df = filtered_df[(filtered_df['dt'] >= pd.Timestamp(start_date)) & (filtered_df['dt'] <= pd.Timestamp(end_date))]
+    filtered_df = filtered_df[(filtered_df['dt'] >= pd.to_datetime(start_date)) & (filtered_df['dt'] <= pd.to_datetime(end_date))]
 
     # Aggregate spend per business and get the top 10
     top_spenders = (

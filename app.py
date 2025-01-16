@@ -273,6 +273,18 @@ order by 3
 where flag !='Others'
 '''
 
+bp_buid_query = '''
+
+SELECT
+    id as bid,json_extract_path_text(json_extract_array_element_text(business_user_ids, 0), 'role') AS role,
+    json_extract_path_text(json_extract_array_element_text(business_user_ids, 0), 'business_user_id') AS buid
+FROM
+    zocket_global.business_profile
+WHERE
+    json_extract_path_text(json_extract_array_element_text(business_user_ids, 0), 'role') = 'owner'
+    
+    '''
+
 # datong_api_query='''
 
 # SELECT (euid::float)euid,ad_account_name,aas.ad_account_id,currency_code,aas.dt,spend,total_spend
@@ -339,6 +351,7 @@ list_df = execute_query(query=list_query)
 # ai_spends_df = execute_query(query=ai_spends_query)
 ai_campaign_spends_df = execute_query(query=zocket_ai_campaigns_spends_query)
 disabled_account_df = execute_query(query=disabled_account_query)
+bid_buid_df = execute_query(query=bp_buid_query)
 # datong_api_df = execute_query(query=datong_api_query) 
 
 
@@ -433,8 +446,8 @@ df = df[df['dt'] != date.today()]
 with st.sidebar:
     selected = option_menu(
         menu_title="Navigation",  # Required
-        options=["Login","Key Account Stats", "Raw Data","Overall Stats - Ind","Overall Stats - US","Euid - adaccount mapping","Top accounts","FB API Campaign spends","Disabled Ad Accounts","Stripe Transaction","Summary","BM Summary"],  # Required
-        icons=["lock","airplane-engines", "table","currency-rupee",'currency-dollar','link',"graph-up","suit-spade","slash-circle","credit-card-2-front-fill","book","book-fill"],  # Optional: icons from the Bootstrap library
+        options=["Login","Key Account Stats", "Raw Data","Overall Stats - Ind","Overall Stats - US","Euid - adaccount mapping","Top accounts","FB API Campaign spends","Disabled Ad Accounts","Stripe Transaction","Summary","BM Summary","BID - BUID Mapping"],  # Required
+        icons=["lock","airplane-engines", "table","currency-rupee",'currency-dollar','link',"graph-up","suit-spade","slash-circle","credit-card-2-front-fill","book","book-fill","link-45deg"],  # Optional: icons from the Bootstrap library
         menu_icon="cast",  # Optional: main menu icon
         default_index=0,  # Default active menu item
     )
@@ -713,6 +726,21 @@ elif selected == "Overall Stats - Ind" and st.session_state.status == "verified"
     # Display the current month spend as a metric
     col3.metric(label="Current Month Spend", value=f"₹{ind_current_month_spend:}")
 
+    #add a pivot 
+
+
+    
+    st.write("Date wise spend data:")
+    ind_grouped_data_adacclevel['euid'] = pd.to_numeric(ind_grouped_data_adacclevel['euid'], errors='coerce')
+    st.dataframe(
+        ind_grouped_data_adacclevel.pivot(
+            index=['euid', 'ad_account_id', 'ad_account_name', 'business_name', 'company_name', 'currency_code'], 
+            columns='dt', 
+            values='spend'
+        ).sort_index(axis=1, ascending=False), 
+        use_container_width=True
+    )
+
 
     st.write("Yesterday spend data:")
     st.dataframe(ind_yesterday_data[['euid','ad_account_id','ad_account_name','currency_code','business_name','company_name','spend','dt']].sort_values(by='spend', ascending=False).reset_index(drop=True), use_container_width=True)
@@ -720,6 +748,7 @@ elif selected == "Overall Stats - Ind" and st.session_state.status == "verified"
     st.write("Current Month spend data:")
     ind_grouped_data_adacclevel = ind_current_month_df.groupby([pd.to_datetime(ind_current_month_df['dt']).dt.strftime('%b %y'), 'euid','ad_account_id','ad_account_name','currency_code','business_name','company_name'])['spend'].sum().reset_index(name='spend').sort_values(by='spend', ascending=False).reset_index(drop=True)
     ind_grouped_data_adacclevel.index += 1
+
 
     # #Dataframe grouped by month and year of dt
     # ind_grouped_data_adacclevel = indian_df[indian_df['dt'].dt.month == current_month].groupby([pd.to_datetime(indian_df['dt']).dt.strftime('%b %y'), 'euid'])['spend'].sum().reset_index(name='spend').sort_values(by='spend', ascending=False)
@@ -1246,8 +1275,8 @@ elif selected == "FB API Campaign spends" and st.session_state.status == "verifi
             # else:
             #     today_spend = ai_campaign_spends_df[ai_campaign_spends_df['dt'].dt.date == today]['spend_in_inr'].sum() 
     today_spend = ai_campaign_spends_df[ai_campaign_spends_df['dt'].dt.date == today]['spend_in_usd'].sum() 
-    Overall_spend = ai_campaign_spends_df['spend_in_usd'].sum() 
-
+    Overall_spend = ai_campaign_spends_df[ai_campaign_spends_df['dt'].dt.year == today.year]['spend_in_usd'].sum()
+    
     # Yesterday's Spend
     yesterday_spend = ai_campaign_spends_df[ai_campaign_spends_df['dt'].dt.date == yesterday]['spend_in_usd'].sum()
     day_before_yesterday_spend = ai_campaign_spends_df[ai_campaign_spends_df['dt'].dt.date == day_before_yst]['spend_in_usd'].sum()
@@ -1794,3 +1823,17 @@ elif selected == "BM Summary" and st.session_state.status == "verified":
 
     # st.line_chart(ind_df.groupby('dt').sum()['spend'])
     # st.line_chart(us_df.groupby('dt').sum()['spend_in_usd'])
+
+elif selected == "BID - BUID Mapping" and st.session_state.status == "verified":
+
+    st.title("BID - BUID Mapping")
+
+    bid_buid_df = bid_buid_df[['bid','buid']]
+
+    bid_selection = st.number_input("Enter BID", min_value=0, step=1, key='bid')
+
+    st.dataframe(bid_buid_df[bid_buid_df['bid']==bid_selection], use_container_width=True)
+
+    # buid_selection = st.number_input("Enter BUID", min_value=0, step=1, key='buid')
+
+    # st.dataframe(bid_buid_df[bid_buid_df['buid']==buid_selection], use_container_width=True)

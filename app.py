@@ -1164,8 +1164,11 @@ elif selected == "Top accounts" and st.session_state.status == "verified":
 elif selected == "FB API Campaign spends" and st.session_state.status == "verified":
 
     st.title("FB API Campaign Spend Dashboard")
+    st.text("Excludes today's Data.")
 
     ai_campaign_spends_df['spend'] = pd.to_numeric(ai_campaign_spends_df['spend'], errors='coerce')
+
+    ai_campaign_spends_df = ai_campaign_spends_df[pd.to_datetime(ai_campaign_spends_df['dt']).dt.date != datetime.now().date()]
 
     #Arrange key metrics in columns for better layout
     col1, col2 = st.columns(2)
@@ -1255,7 +1258,6 @@ elif selected == "FB API Campaign spends" and st.session_state.status == "verifi
     today = datetime.now().date()
     yesterday = today - timedelta(days=1)
 
-    filtered_data = ai_campaign_spends_df[ai_campaign_spends_df['dt'].dt.date < today]
 
        # Assuming your 'dt' column is already in date format (e.g., YYYY-MM-DD)
     if grouping == 'Year':

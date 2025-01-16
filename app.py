@@ -209,7 +209,7 @@ FROM zocket_global.fb_child_ad_accounts a
 #adlevel query
 zocket_ai_campaigns_spends_query='''
 select
-ggci.ad_account_id,ggci.currency,date(date_start) as dt,account_name,c.id as campaign_id,c.name as campaign_name,SUM(ggci.spend)spend
+ggci.ad_account_id,ggci.currency,date(date_start) as dt,account_name,gc.campaign_id as campaign_id,c.name as campaign_name,SUM(ggci.spend)spend
 FROM
     zocket_global.campaigns c
     join zocket_global.fb_campaigns gc on gc.app_campaign_id = c.id 
@@ -1188,7 +1188,7 @@ elif selected == "FB API Campaign spends" and st.session_state.status == "verifi
 
         grouping = st.selectbox('Choose Grouping', ['Year', 'Month', 'Week', 'Date'], index=1)
 
-        end_date = st.date_input("End Date", value=datetime.now())
+        end_date = st.date_input("End Date", value=ai_campaign_spends_df['dt'].max())
 
     non_usd_currencies = ai_campaign_spends_df['currency'].unique()
     non_usd_currencies = [currency for currency in non_usd_currencies if currency != 'USD']
@@ -1251,10 +1251,11 @@ elif selected == "FB API Campaign spends" and st.session_state.status == "verifi
 
     ai_campaign_spends_df['dt'] = pd.to_datetime(ai_campaign_spends_df['dt'])
 
-
     # Today's and yesterday's dates for calculating metrics
     today = datetime.now().date()
     yesterday = today - timedelta(days=1)
+
+    filtered_data = ai_campaign_spends_df[ai_campaign_spends_df['dt'].dt.date < today]
 
        # Assuming your 'dt' column is already in date format (e.g., YYYY-MM-DD)
     if grouping == 'Year':
@@ -1316,8 +1317,8 @@ elif selected == "FB API Campaign spends" and st.session_state.status == "verifi
     average_spend_change = ((avg_spend_current_month - avg_spend_last_month) / avg_spend_last_month * 100) if avg_spend_last_month > 0 else None
     
     # Display Metrics
-    col1.metric("Overall Spend (YTD)", f"${Overall_spend:,.2f}")
-    # col1.metric("Today's Spend", f"${today_spend:,.2f}",f"{tdy_spend_change:,.2f}%")
+    col1.metric("Overall Spend (YTD)", f"${int(Overall_spend):,}")
+    # col1.metric("Today's Spend", f"${int(today_spend):,}",f"{tdy_spend_change:,.2f}%")
     
     col2.metric("Yesterday Spend", f"${int(yesterday_spend):,}",f"{spend_change:,.2f}%")
     col1.metric("Current Month Spend", f"${int(current_month_spend):,}")
@@ -1336,13 +1337,34 @@ elif selected == "FB API Campaign spends" and st.session_state.status == "verifi
     pivot_df = grouped_df.pivot(index=['account_name','ad_account_id','currency'], columns='grouped_date', values='spend')
 
     # st.dataframe(grouped_df, use_container_width=True)
-    st.dataframe(pivot_df, use_container_width=True)
 
+    # Sort the columns by date in descending order
+    if grouping == 'Year':
+        pivot_df = pivot_df[sorted(pivot_df.columns, key=lambda x: pd.to_datetime(x, format='%Y'), reverse=True)]
+    elif grouping == 'Month':
+        pivot_df = pivot_df[sorted(pivot_df.columns, key=lambda x: pd.to_datetime(x, format='%b-%y'), reverse=True)]
+    elif grouping == 'Week':
+        pivot_df = pivot_df[sorted(pivot_df.columns, key=lambda x: (int(x.split(' - week ')[0]), int(x.split(' - week ')[1])), reverse=True)]
+    else:  # Date
+        pivot_df = pivot_df[sorted(pivot_df.columns, key=lambda x: pd.to_datetime(x), reverse=True)]
+
+
+    st.dataframe(pivot_df, use_container_width=True)
    
     # Display grouped data
     st.header(f"Spend Data Ad Account Level - {grouping} USD View")
     usd_grouped_df = ai_campaign_spends_df.groupby(['ad_account_id','account_name','grouped_date'])['spend_in_usd'].sum().reset_index()
     pivot_df = usd_grouped_df.pivot(index=['account_name','ad_account_id'], columns='grouped_date', values='spend_in_usd')
+
+    # Sort the columns by date in descending order
+    if grouping == 'Year':
+        pivot_df = pivot_df[sorted(pivot_df.columns, key=lambda x: pd.to_datetime(x, format='%Y'), reverse=True)]
+    elif grouping == 'Month':
+        pivot_df = pivot_df[sorted(pivot_df.columns, key=lambda x: pd.to_datetime(x, format='%b-%y'), reverse=True)]
+    elif grouping == 'Week':
+        pivot_df = pivot_df[sorted(pivot_df.columns, key=lambda x: (int(x.split(' - week ')[0]), int(x.split(' - week ')[1])), reverse=True)]
+    else:  # Date
+        pivot_df = pivot_df[sorted(pivot_df.columns, key=lambda x: pd.to_datetime(x), reverse=True)]
 
     # st.dataframe(grouped_df, use_container_width=True)
     st.dataframe(pivot_df, use_container_width=True) 
@@ -1350,21 +1372,35 @@ elif selected == "FB API Campaign spends" and st.session_state.status == "verifi
     st.header("Campaign Level Data")
 
     # Aggregate the spend values by the selected grouping
-    grouped_df = ai_campaign_spends_df.groupby(['ad_account_id','account_name','campaign_name','currency','grouped_date'])['spend'].sum().reset_index()
+    grouped_df = ai_campaign_spends_df.groupby(['ad_account_id','account_name','campaign_name','campaign_id','currency','grouped_date'])['spend'].sum().reset_index()
    
     # Display grouped data
     st.header(f"Spend Data Campaign Level- {grouping}")
-    pivot_df = grouped_df.pivot(index=['account_name','ad_account_id','campaign_name','currency'], columns='grouped_date', values='spend')
+    pivot_df = grouped_df.pivot(index=['account_name','ad_account_id','campaign_name','campaign_id','currency'], columns='grouped_date', values='spend')
+
+    # Sort the columns by date in descending order
+    if grouping == 'Year':
+        pivot_df = pivot_df[sorted(pivot_df.columns, key=lambda x: pd.to_datetime(x, format='%Y'), reverse=True)]
+    elif grouping == 'Month':
+        pivot_df = pivot_df[sorted(pivot_df.columns, key=lambda x: pd.to_datetime(x, format='%b-%y'), reverse=True)]
+    elif grouping == 'Week':
+        pivot_df = pivot_df[sorted(pivot_df.columns, key=lambda x: (int(x.split(' - week ')[0]), int(x.split(' - week ')[1])), reverse=True)]
+    else:  # Date
+        pivot_df = pivot_df[sorted(pivot_df.columns, key=lambda x: pd.to_datetime(x), reverse=True)]
 
     # st.dataframe(grouped_df, use_container_width=True)
     st.dataframe(pivot_df, use_container_width=True)
 
     # Display grouped data
     st.header(f"Spend Data Campaign Level - {grouping} USD View")
-    usd_grouped_df = ai_campaign_spends_df.groupby(['ad_account_id','account_name','campaign_name','grouped_date'])['spend_in_usd'].sum().reset_index()
-    usd_pivot_df = usd_grouped_df.pivot(index=['account_name','ad_account_id','campaign_name'], columns='grouped_date', values='spend_in_usd')
+    usd_grouped_df = ai_campaign_spends_df.groupby(['ad_account_id','account_name','campaign_name','campaign_id','grouped_date'])['spend_in_usd'].sum().reset_index()
+    pivot_df = usd_grouped_df.pivot(index=['account_name','ad_account_id','campaign_name','campaign_id'], columns='grouped_date', values='spend_in_usd')
 
-    st.dataframe(usd_pivot_df, use_container_width=True)
+    # Sort the columns by date in descending order
+    pivot_df = pivot_df.reindex(sorted(pivot_df.columns, reverse=True), axis=1)
+
+
+    st.dataframe(pivot_df, use_container_width=True)
     
     # Display full table
     st.header("Full Table")

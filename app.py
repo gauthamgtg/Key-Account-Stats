@@ -94,7 +94,7 @@ with spends AS
         from payment_trans_details td
         group by 1)
 
-select coalesce(c.app_business_id,bp.id) as euid,coalesce(eu.business_name,bp.name) as business_name,coalesce(eu.company_name,bp.brand_name) as company_name,dt,coalesce(b.name,d.name) as ad_account_name,
+select coalesce(c.app_business_id,cast(bp.buid as int)) as euid,coalesce(eu.business_name,bp.name) as business_name,coalesce(eu.company_name,bp.brand_name) as company_name,dt,coalesce(b.name,d.name) as ad_account_name,
 coalesce(c.name,e.name) as business_manager_name,
 case when a.ad_account_id ='act_1090921776002942' then 'INR' else COALESCE(b.currency,d.currency) end as currency_code,a.ad_account_id,spend
 from 
@@ -106,7 +106,14 @@ from
     left join enterprise_users eu on eu.euid=c.app_business_id
     left join zocket_global.fb_child_ad_accounts d on a.ad_account_id = d.ad_account_id
     left join zocket_global.fb_child_business_managers e on e.id = d.app_business_manager_id
-    left join zocket_global.business_profile bp on e.app_business_id=bp.id
+    left join 
+    (SELECT
+    id ,name,brand_name,json_extract_path_text(json_extract_array_element_text(business_user_ids, 0), 'role') AS role,
+    json_extract_path_text(json_extract_array_element_text(business_user_ids, 0), 'business_user_id') AS buid
+FROM
+    zocket_global.business_profile
+WHERE
+    json_extract_path_text(json_extract_array_element_text(business_user_ids, 0), 'role') = 'owner' )bp on e.app_business_id=bp.id
     order by euid,dt desc
     '''
 
@@ -363,18 +370,22 @@ account_list_df = pd.read_csv(url)
 
 # Create a DataFrame for each column
 datong_acc_list_df = account_list_df[['Datong']].dropna(inplace=False)
-roposo_acc_list_df = account_list_df[['Roposo']].dropna(inplace=False)
+roposo_acc_list_df = account_list_df[['Roposo','Media_Buyer']].dropna(inplace=False)
 
 top_customers_flag = []
 for index, row in df.iterrows():
     if row['ad_account_id'] in datong_acc_list_df.values:
         top_customers_flag.append('Datong')
-    elif row['dt'] >= datetime(2024, 9, 30).date() and row['ad_account_id'] in roposo_acc_list_df.values:
+    elif row['dt'] > datetime(2024, 9, 30).date() and row['ad_account_id'] in roposo_acc_list_df.values:
         top_customers_flag.append('Roposo')
     else:
         top_customers_flag.append('Others')
 
 df['top_customers_flag'] = top_customers_flag
+df = df.merge(roposo_acc_list_df, how='left', left_on='ad_account_id', right_on='Roposo')
+df['Media_Buyer'] = df['Media_Buyer'].fillna('Null')
+df = df.drop(columns=['Roposo'])
+
 
 #chaning proper format of date
 df['dt'] = pd.to_datetime(df['dt']).dt.date
@@ -577,8 +588,8 @@ if selected == "Key Account Stats" and st.session_state.status == "verified":
 
     #display pivot table
     st.header(f"Spend Data Ad Account Level- {grouping}")
-    grouped_df = filtered_df.groupby(['euid','ad_account_id','ad_account_name','business_manager_name','business_name','grouped_date','flag'])[['spend']].sum().reset_index()
-    pivot_df = grouped_df.pivot(index=['euid','ad_account_id','ad_account_name','business_manager_name','business_name','flag'], columns='grouped_date', values='spend')
+    grouped_df = filtered_df.groupby(['euid','ad_account_id','ad_account_name','business_manager_name','grouped_date','flag','Media_Buyer'])[['spend']].sum().reset_index()
+    pivot_df = grouped_df.pivot(index=['euid','ad_account_id','ad_account_name','business_manager_name','flag','Media_Buyer'], columns='grouped_date', values='spend')
         # Sort the columns by date
     if grouping == 'Year':
         pivot_df = pivot_df[sorted(pivot_df.columns, key=lambda x: pd.to_datetime(x, format='%Y'), reverse=True)]
@@ -592,11 +603,11 @@ if selected == "Key Account Stats" and st.session_state.status == "verified":
     st.dataframe(pivot_df, use_container_width=True)
 
 
-    yst_stats_df = filtered_df[filtered_df['dt'] == yesterday].groupby(['euid','ad_account_id','ad_account_name','business_manager_name','business_name','flag'], as_index=False)['spend'].sum().sort_values(by='spend', ascending=False).reset_index(drop=True)
+    yst_stats_df = filtered_df[filtered_df['dt'] == yesterday].groupby(['euid','ad_account_id','ad_account_name','business_manager_name','flag','Media_Buyer'], as_index=False)['spend'].sum().sort_values(by='spend', ascending=False).reset_index(drop=True)
     yst_stats_df.index +=1
-    current_month_stats_df = filtered_df[filtered_df['dt'].apply(lambda x: x.month == current_month and x.year == current_year)].groupby(['euid','ad_account_id','ad_account_name','business_manager_name','business_name','flag'], as_index=False)['spend'].sum().sort_values(by='spend', ascending=False).reset_index(drop=True)
+    current_month_stats_df = filtered_df[filtered_df['dt'].apply(lambda x: x.month == current_month and x.year == current_year)].groupby(['euid','ad_account_id','ad_account_name','business_manager_name','flag','Media_Buyer'], as_index=False)['spend'].sum().sort_values(by='spend', ascending=False).reset_index(drop=True)
     current_month_stats_df.index +=1
-    Overall_spend = filtered_df.groupby(['euid','ad_account_id','ad_account_name','business_manager_name','business_name','flag'], as_index=False)['spend'].sum().sort_values(by='spend', ascending=False).reset_index(drop=True)
+    Overall_spend = filtered_df.groupby(['euid','ad_account_id','ad_account_name','business_manager_name','flag','Media_Buyer'], as_index=False)['spend'].sum().sort_values(by='spend', ascending=False).reset_index(drop=True)
     Overall_spend.index +=1
     
     st.write("Yesterday spend data:")
@@ -620,8 +631,8 @@ if selected == "Key Account Stats" and st.session_state.status == "verified":
     summary_df = summary_df.fillna(0)
     # print(summary_df.columns)
     # st.dataframe(summary_df, use_container_width=True)
-    summary_df = summary_df.groupby(['euid','ad_account_id','business_name','company_name','flag','month','spend_yesterday','spend_curr_month','spend_total'])['spend'].sum().reset_index()
-    summary_df = summary_df.pivot(index=['euid','ad_account_id','business_name','company_name','flag','spend_total','spend_curr_month','spend_yesterday'], columns='month', values='spend')
+    summary_df = summary_df.groupby(['euid','ad_account_id','business_name','company_name','flag','Media_Buyer','month','spend_yesterday','spend_curr_month','spend_total'])['spend'].sum().reset_index()
+    summary_df = summary_df.pivot(index=['euid','ad_account_id','business_name','company_name','flag','Media_Buyer','spend_total','spend_curr_month','spend_yesterday'], columns='month', values='spend')
 
 
     # Sort the columns by date
@@ -664,8 +675,8 @@ elif selected == "Raw Data" and st.session_state.status == "verified":
     st.write("Disabled accounts raw dump")
     st.dataframe(disabled_account_df, use_container_width=True)
 
-    st.write("Datong API raw dump")
-    st.dataframe(datong_api_df, use_container_width=True)
+    # st.write("Datong API raw dump")
+    # st.dataframe(datong_api_df, use_container_width=True)
 
     st.write("FBI API spends raw dump")
     st.dataframe(ai_campaign_spends_df, use_container_width=True)
@@ -974,8 +985,16 @@ elif selected == "Euid - adaccount mapping" and st.session_state.status == "veri
     filtered_list_df = list_df[list_df['euid'] == euid]
     st.dataframe(filtered_list_df, use_container_width=True)
 
+    ad_account_id = st.text_input("Type an ad account id")
+
+    filtered_list_df = list_df[list_df['ad_account_id'] == ad_account_id]
+    st.dataframe(filtered_list_df, use_container_width=True)
+
 elif selected == "Top accounts" and st.session_state.status == "verified":
     
+    # Streamlit App
+    st.title("Top 10 Businesses by Spend")
+
     non_usd_currencies = df['currency_code'].unique()
     non_usd_currencies = [currency for currency in non_usd_currencies if currency != 'USD']
 
@@ -1002,6 +1021,19 @@ elif selected == "Top accounts" and st.session_state.status == "verified":
                         'MXN':0.050
                     }
 
+    # Display input boxes for each unique currency code other than 'USD'
+    st.write("Enter conversion rates for the following currencies:")
+   
+    # Create columns dynamically based on the number of currencies
+    cols = st.columns(4)  # Adjust the number of columns (3 in this case)
+
+    # Iterate over non-USD currencies and display them in columns
+    for idx, currency in enumerate(non_usd_currencies):
+        default_value = default_values.get(currency, 1.0)  # Use default value if defined, otherwise 1.0
+        with cols[idx % 4]:  # Rotate through the columns
+            conversion_rates[currency] = st.number_input(
+                f"{currency} to USD:", value=default_value, min_value=0.0, step=0.001, format="%.3f"
+            )
 
     def convert_to_usd(row):
         if row['currency_code'] == 'USD':
@@ -1017,9 +1049,11 @@ elif selected == "Top accounts" and st.session_state.status == "verified":
     # df['spend_in_inr'] = df['spend_in_usd'] * usdtoinr
 
     # st.dataframe(df, use_container_width=True)
-    
-    # Streamlit App
-    st.title("Top 10 Businesses by Spend")
+
+
+
+    # Date Range Selection
+    time_frame = st.selectbox("Select Time Frame", ["Last 30 Days", "Last 90 Days", "Overall", "Custom Date Range"])
 
     # Currency Filter
     currency_option = st.selectbox("Select BM", ["All", "INR", "USD"])
@@ -1029,23 +1063,6 @@ elif selected == "Top accounts" and st.session_state.status == "verified":
         filtered_df = df[df['currency_code'] == 'INR']
     if currency_option == "All":
         filtered_df = df
-
-        # Display input boxes for each unique currency code other than 'USD'
-    st.write("Enter conversion rates for the following currencies:")
-   
-    # Create columns dynamically based on the number of currencies
-    cols = st.columns(5)  # Adjust the number of columns (3 in this case)
-
-    # Iterate over non-USD currencies and display them in columns
-    for idx, currency in enumerate(non_usd_currencies):
-        default_value = default_values.get(currency, 1.0)  # Use default value if defined, otherwise 1.0
-        with cols[idx % 5]:  # Rotate through the columns
-            conversion_rates[currency] = st.number_input(
-                f"{currency} to USD:", value=default_value, min_value=0.0, step=0.001, format="%.3f"
-            )
-
-    # Date Range Selection
-    time_frame = st.selectbox("Select Time Frame", ["Last 30 Days", "Last 90 Days", "Overall", "Custom Date Range"])
 
     #Top Numbers
     n = st.number_input("Number of records to display", min_value=1, value=10)
@@ -1068,10 +1085,10 @@ elif selected == "Top accounts" and st.session_state.status == "verified":
 
     # Aggregate spend per business and get the top 10
     top_spenders = (
-        filtered_df.groupby([ "ad_account_id"])["spend"]
+        filtered_df.groupby([ "ad_account_id"])["spend_in_usd"]
         .sum()
         .reset_index()
-        .sort_values(by="spend", ascending=False)
+        .sort_values(by="spend_in_usd", ascending=False)
         .head(n)
     )
 
@@ -1079,9 +1096,9 @@ elif selected == "Top accounts" and st.session_state.status == "verified":
 
     top_businesses = pd.merge(top_spenders, filtered_df, on="ad_account_id", how="left") \
                    .drop_duplicates(subset="ad_account_id") \
-                   .sort_values(by="spend", ascending=False).reset_index(drop=True)
+                   .sort_values(by="spend_in_usd", ascending=False).reset_index(drop=True)
 
-    top_businesses = top_businesses[['euid', 'ad_account_id', 'ad_account_name','business_manager_name', 'spend']]
+    top_businesses = top_businesses[['euid', 'ad_account_id', 'ad_account_name','business_manager_name', 'spend_in_usd']]
 
     # Display top 10 businesses
     st.header("Top 10 Businesses by Spend")
@@ -1319,7 +1336,10 @@ elif selected == "FB API Campaign spends" and st.session_state.status == "verifi
     average_spend_change = ((avg_spend_current_month - avg_spend_last_month) / avg_spend_last_month * 100) if avg_spend_last_month > 0 else None
     
     # Display Metrics
-    col1.metric("Overall Spend (YTD)", f"${int(Overall_spend):,}")
+    last_year_spend = ai_campaign_spends_df[ai_campaign_spends_df['dt'].dt.year == today.year-1]['spend_in_usd'].sum()
+    print(last_year_spend)
+    overall_spend_change = ((Overall_spend - last_year_spend) / last_year_spend * 100) if last_year_spend != 0 else 0
+    col1.metric("Overall Spend (YTD)", f"${int(Overall_spend):,}",f"{overall_spend_change:,.2f}%")
     # col1.metric("Today's Spend", f"${int(today_spend):,}",f"{tdy_spend_change:,.2f}%")
     
     col2.metric("Yesterday Spend", f"${int(yesterday_spend):,}",f"{spend_change:,.2f}%")

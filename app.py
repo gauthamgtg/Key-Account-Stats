@@ -84,9 +84,11 @@ query = '''
 with spends AS
     (SELECT  ad_account_id,date(date_start) as dt,max(spend)spend
     from 
-    (select * from ad_account_spends 
-    union ALL
-    select * from zocket_global.ad_account_spends)aas
+    (
+    select * from ad_account_spends 
+--    union ALL
+--    select * from zocket_global.ad_account_spends
+    )aas
 	group by 1,2
     ),
     total_payment AS
@@ -466,6 +468,9 @@ with st.sidebar:
     if st.button("Refresh Data", key="refresh_button"):
         st.cache_data.clear()  # Clear cached data
         st.success("Cache cleared and data refreshed!")
+
+
+st.warning('Only Ad360 Accounts Spends data are available for now', icon="⚠️")
 
 #Page sections
 if selected == "Login":

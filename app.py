@@ -85,9 +85,9 @@ with spends AS
     (SELECT  ad_account_id,date(date_start) as dt,max(spend)spend
     from 
     (
-    select * from ad_account_spends 
---    union ALL
---    select * from zocket_global.ad_account_spends
+    select ad_account_id,date(date_start) as date_start,spend from ad_account_spends 
+    union ALL
+    select ad_account_id,date(date_start) as date_start,spend from zocket_global.ad_account_spends
     )aas
 	group by 1,2
     ),
@@ -199,17 +199,17 @@ euid not in (701,39)
     '''
 
 list_query = '''
-SELECT distinct b.app_business_id as euid, a.ad_account_id, a.name as ad_account_name, b.name as business_manager_name,eu.business_name,eu.company_name
+SELECT distinct b.app_business_id as euid, a.ad_account_id, a.name as ad_account_name, b.name as business_manager_name,eu.business_name,eu.company_name,a.currency
 FROM fb_ad_accounts a
 	LEFT JOIN fb_business_managers b ON b.id = a.app_business_manager_id
    left join enterprise_users eu on b.app_business_id=eu.euid
 union all
-SELECT distinct b.app_business_id as euid, a.ad_account_id, a.name as ad_account_name, b.name as business_manager_name,eu.business_name,eu.company_name
+SELECT distinct b.app_business_id as euid, a.ad_account_id, a.name as ad_account_name, b.name as business_manager_name,eu.business_name,eu.company_name,a.currency
 FROM z_b.fb_ad_accounts a
 	LEFT JOIN z_b.fb_business_managers b ON b.id = a.app_business_manager_id
    left join enterprise_users eu on b.app_business_id=eu.euid
 union all
-SELECT distinct b.app_business_id as euid, a.ad_account_id, a.name as ad_account_name, b.name as business_manager_name,bp.name,bp.brand_name
+SELECT distinct b.app_business_id as euid, a.ad_account_id, a.name as ad_account_name, b.name as business_manager_name,bp.name,bp.brand_name,a.currency
 FROM zocket_global.fb_child_ad_accounts a
 	LEFT JOIN zocket_global.fb_child_business_managers b ON b.id = a.app_business_manager_id
    left join zocket_global.business_profile bp on b.app_business_id=bp.id
@@ -225,7 +225,7 @@ FROM
     join zocket_global.fb_adsets fbadset on gc.id = fbadset.campaign_id
     join zocket_global.fb_ads fbads on fbadset.id = fbads.adset_id
     join zocket_global.fb_ads_age_gender_metrics_v3 ggci on ggci.ad_id = fbads.ad_id
-where date(date_start)>='2024-01-01'
+where date(date_start)>='2024-01-01' and date(date_start)<current_date
 and c.imported_at is null
 group by 1,2,3,4,5,6
 '''
@@ -470,11 +470,10 @@ with st.sidebar:
         st.success("Cache cleared and data refreshed!")
 
 
-st.warning('Only Ad360 Accounts Spends data are available for now', icon="⚠️")
+# st.warning('Only Ad360 Accounts Spends data are available for now', icon="⚠️")
 
 #Page sections
 if selected == "Login":
-
 
     st.session_state.status = st.session_state.get("status", "unverified")
     st.title("Login page")

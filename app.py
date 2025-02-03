@@ -1899,7 +1899,7 @@ elif selected == "Disabled account anlaysis" and st.session_state.status == "ver
 
     st.title("Disabled Account Analysis")
 
-    st.title("Euid - adaccount mapping")
+    st.title("All accounts list")
     st.dataframe(list_df, use_container_width=True)
 
     disabled_account_df = disabled_account_df.sort_values(by='disable_date', ascending=False)

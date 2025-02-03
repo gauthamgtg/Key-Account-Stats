@@ -1921,3 +1921,15 @@ elif selected == "Disabled account anlaysis" and st.session_state.status == "ver
     st.dataframe(merged_df, use_container_width=True)
 
     st.dataframe(merged_df.groupby(['euid_x','flag']).size().reset_index(name='counts'), use_container_width=True)
+
+    daterange = st.date_input("Select Date Range", value=[datetime.now() - timedelta(days=30), datetime.now()])
+
+    df = df[df['dt'] >= daterange[0]]
+    df = df[df['dt'] <= daterange[1]]
+
+    df = df.groupby('ad_account_id', as_index=False).agg({'spend': 'sum'})
+    merged_df = merged_df.merge(df, on='ad_account_id', how='left')
+
+    merged_df['spend'] = merged_df['spend'].fillna(0)
+
+    st.dataframe(merged_df, use_container_width=True)

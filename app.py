@@ -199,17 +199,12 @@ euid not in (701,39)
     '''
 
 list_query = '''
-SELECT distinct b.app_business_id as euid, a.ad_account_id, a.name as ad_account_name, b.name as business_manager_name,eu.business_name,eu.company_name,a.currency
+SELECT distinct b.app_business_id as euid, a.ad_account_id, a.name as ad_account_name, b.name as business_manager_name,b.business_manager_id,eu.business_name,eu.company_name,a.currency
 FROM fb_ad_accounts a
 	LEFT JOIN fb_business_managers b ON b.id = a.app_business_manager_id
    left join enterprise_users eu on b.app_business_id=eu.euid
 union all
-SELECT distinct b.app_business_id as euid, a.ad_account_id, a.name as ad_account_name, b.name as business_manager_name,eu.business_name,eu.company_name,a.currency
-FROM z_b.fb_ad_accounts a
-	LEFT JOIN z_b.fb_business_managers b ON b.id = a.app_business_manager_id
-   left join enterprise_users eu on b.app_business_id=eu.euid
-union all
-SELECT distinct b.app_business_id as euid, a.ad_account_id, a.name as ad_account_name, b.name as business_manager_name,bp.name,bp.brand_name,a.currency
+SELECT distinct b.app_business_id as euid, a.ad_account_id, a.name as ad_account_name, b.name as business_manager_name,b.business_manager_id,bp.name,bp.brand_name,a.currency
 FROM zocket_global.fb_child_ad_accounts a
 	LEFT JOIN zocket_global.fb_child_business_managers b ON b.id = a.app_business_manager_id
    left join zocket_global.business_profile bp on b.app_business_id=bp.id
@@ -273,8 +268,8 @@ COALESCE(c.name,e.name)as bm_name,
 from "dev"."z_b"."ad_account_webhook" a
 left join fb_ad_accounts b on a.ad_account_id = b.ad_account_id
 left join fb_business_managers c on c.id = b.app_business_manager_id
-left join z_b.fb_ad_accounts d on a.ad_account_id = d.ad_account_id
-left join z_b.fb_business_managers e on e.id = d.app_business_manager_id
+left join zocket_global.fb_child_ad_accounts d on a.ad_account_id = d.ad_account_id
+left join zocket_global.fb_child_business_managers e on e.id = d.app_business_manager_id
 left join enterprise_users eu on c.app_business_id=eu.euid
 order by 3
 )
@@ -459,8 +454,8 @@ df = df[df['dt'] != date.today()]
 with st.sidebar:
     selected = option_menu(
         menu_title="Navigation",  # Required
-        options=["Login","Key Account Stats", "Raw Data","Overall Stats - Ind","Overall Stats - US","Euid - adaccount mapping","Top accounts","FB API Campaign spends","Disabled Ad Accounts","Stripe Transaction","Summary","BM Summary","BID - BUID Mapping"],  # Required
-        icons=["lock","airplane-engines", "table","currency-rupee",'currency-dollar','link',"graph-up","suit-spade","slash-circle","credit-card-2-front-fill","book","book-fill","link-45deg"],  # Optional: icons from the Bootstrap library
+        options=["Login","Key Account Stats", "Raw Data","Overall Stats - Ind","Overall Stats - US","Euid - adaccount mapping","Top accounts","FB API Campaign spends","Disabled Ad Accounts","Stripe Transaction","Summary","BM Summary","BID - BUID Mapping","Disabled account anlaysis"],  # Required
+        icons=["lock","airplane-engines", "table","currency-rupee",'currency-dollar','link',"graph-up","suit-spade","slash-circle","credit-card-2-front-fill","book","book-fill","link-45deg","bi-exclamation-octagon-fill"],  # Optional: icons from the Bootstrap library
         menu_icon="cast",  # Optional: main menu icon
         default_index=0,  # Default active menu item
     )
@@ -1899,3 +1894,28 @@ elif selected == "BID - BUID Mapping" and st.session_state.status == "verified":
     # buid_selection = st.number_input("Enter BUID", min_value=0, step=1, key='buid')
 
     # st.dataframe(bid_buid_df[bid_buid_df['buid']==buid_selection], use_container_width=True)
+
+elif selected == "Disabled account anlaysis" and st.session_state.status == "verified":
+
+    st.title("Disabled Account Analysis")
+
+    st.title("Euid - adaccount mapping")
+    st.dataframe(list_df, use_container_width=True)
+
+    disabled_account_df = disabled_account_df.sort_values(by='disable_date', ascending=False)
+
+    # Merge disabled_account_df with list_df on 'ad_account_id'
+    merged_df = list_df.merge(disabled_account_df,on='ad_account_id', how='left')
+
+    # Fill 'flag' column in merged_df with 'Active' where it is null or empty
+    merged_df['flag'] = merged_df['flag'].fillna('Active')
+    merged_df['flag'] = merged_df['flag'].replace('', 'Active')
+
+    # Display the merged DataFrame
+    st.write("Merged DataFrame:")
+    st.dataframe(merged_df, use_container_width=True)
+
+    merged_df = merged_df [['euid_x','ad_account_id','ad_account_name_x','currency_x','flag','disable_date','reactivation_date','disable_reason','business_name','company_name','business_manager_name','business_manager_id']]
+
+    st.write("Final DataFrame:")
+    st.dataframe(merged_df, use_container_width=True)

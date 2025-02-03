@@ -1919,3 +1919,5 @@ elif selected == "Disabled account anlaysis" and st.session_state.status == "ver
 
     st.write("Final DataFrame:")
     st.dataframe(merged_df, use_container_width=True)
+
+    st.dataframe(merged_df.groupby(['euid_x','flag']).size().reset_index(name='counts'), use_container_width=True)

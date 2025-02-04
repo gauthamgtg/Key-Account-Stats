@@ -1734,11 +1734,35 @@ elif selected == "Summary" and st.session_state.status == "verified":
             return df[(df['dt'] >= pd.to_datetime(start_date).date()) & (df['dt'] <= pd.to_datetime(end_date).date())]['spend'].sum()
         return df[df['dt'] >= pd.to_datetime(start_date).date()]['spend'].sum()
     
+    overall_spend = df['spend'].sum()
+    total_this_year_spend = calculate_spend(df, start_of_year)
+    total_this_quarter_spend = calculate_spend(df, start_of_quarter)
+    total_this_month_spend = calculate_spend(df, start_of_month)
+    total_last_month_spend = calculate_spend(df, start_of_last_month, end_of_last_month)
+    total_yesterday_spend = calculate_spend(df, yesterday,yesterday)
+
     # Aggregate spend data
     aggregated_data = []
     for key, group in df.groupby(['business_name', 'company_name', 'ad_account_name', 'business_manager_name', 'ad_account_id','currency_code']):
         business_name, company_name, ad_account_name, business_manager_name, ad_account_id,currency_code = key
         latest_dt = group['dt'].max()
+        
+        total_spend = group['spend'].sum()
+        this_year_spend = calculate_spend(group, start_of_year)
+        this_quarter_spend = calculate_spend(group, start_of_quarter)
+        this_month_spend = calculate_spend(group, start_of_month)
+        last_month_spend = calculate_spend(group, start_of_last_month, end_of_last_month)
+        yesterday_spend = calculate_spend(group, yesterday,yesterday)
+        last_7_days_spend = calculate_spend(group, last_7_days)
+        last_14_days_spend = calculate_spend(group, last_14_days)
+        last_30_days_spend = calculate_spend(group, last_30_days)
+
+        total_spend_contribution = (total_spend / overall_spend) * 100
+        yesterday_contribution = (yesterday_spend / total_yesterday_spend) * 100 if total_spend > 0 else 0
+        this_year_contribution = (this_year_spend / total_this_year_spend) * 100 if total_spend > 0 else 0
+        this_quarter_contribution = (this_quarter_spend / total_this_quarter_spend) * 100 if total_spend > 0 else 0
+        this_month_contribution = (this_month_spend / total_this_month_spend) * 100 if total_spend > 0 else 0
+        last_month_contribution = (last_month_spend / total_last_month_spend) * 100 if total_spend > 0 else 0
         
         aggregated_data.append({
             'Business Name': business_name,
@@ -1748,15 +1772,22 @@ elif selected == "Summary" and st.session_state.status == "verified":
             'Ad Account ID': ad_account_id,
             'Currency': currency_code,
             'Latest Date': latest_dt,
-            'Lifetime Spend': group['spend'].sum(),
-            'This Year': calculate_spend(group, start_of_year),
-            'This Quarter': calculate_spend(group, start_of_quarter),
-            'This Month': calculate_spend(group, start_of_month),
-            'Last Month': calculate_spend(group, start_of_last_month, end_of_last_month),
-            'Yesterday': calculate_spend(group, yesterday,yesterday),
-            'Last 7 Days': calculate_spend(group, last_7_days),
-            'Last 14 Days': calculate_spend(group, last_14_days),
-            'Last 30 Days': calculate_spend(group, last_30_days),
+            'Lifetime Spend': total_spend,
+            'Lifetime Contribution (%)': total_spend_contribution,
+            'This Year': this_year_spend,
+            'This Year Contribution (%)': this_year_contribution,
+            'This Quarter': this_quarter_spend,
+            'This Quarter Contribution (%)': this_quarter_contribution,
+            'This Month': this_month_spend,
+            'This Month Contribution (%)': this_month_contribution,
+            'Last Month': last_month_spend,
+            'Last Month Contribution (%)': last_month_contribution,
+            'Yesterday': yesterday_spend,
+            'Yesterday Contribution (%)': yesterday_contribution,
+            'Last 7 Days': last_7_days_spend,
+            'Last 14 Days': last_14_days_spend,
+            'Last 30 Days': last_30_days_spend,
+            
         })
 
     # Create a new DataFrame for the summarized data

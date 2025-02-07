@@ -119,7 +119,8 @@ WHERE
     order by euid,dt desc
     '''
 
-sub_query = '''SELECT * FROM
+sub_query = '''
+SELECT * FROM
 (
 SELECT euid,ad_account_id,ad_account_name,sub_start, sub_end, 
 currency, plan_amount,plan_limit,flag,total_subscription_days, subscription_days_completed,adspends_added,
@@ -135,10 +136,10 @@ row_number() over(partition by ad_account_id ORDER by sub_start desc) as rw
 FROM
 (
 SELECT  euid,ad_account_id,ad_account_name,created_at as sub_start,expiry_date as sub_end, 
-currency, plan_amount,plan_limit,flag,
+currency, plan_amount,REPLACE(plan_limit, ',', '') as plan_limit,flag,
 datediff('day',sub_start,expiry_date) as total_subscription_days,
 (datediff('day',sub_start,current_date)) as subscription_days_completed,
-case when datediff('day',sub_start,expiry_date)=0 then 0 else (plan_limit/datediff('day',sub_start,expiry_date)) end as expected_per_day_spend,
+case when datediff('day',sub_start,expiry_date)=0 then 0 else (REPLACE(plan_limit, ',', '')/datediff('day',sub_start,expiry_date)) end as expected_per_day_spend,
 (adspend_added+transfer_amount) as adspends_added
 FROM
 (
@@ -149,36 +150,22 @@ case when currency='INR' then price_range else usd_price_range end as plan_limit
 FROM
 (
 SELECT  a.euid,a.ad_account_id,a.created_at,a.expiry_date,a.amount as subamt,sp.plan_id,
- ad_account_name,
-coalesce(efaa.currency,faa.currency,'INR') as currency,
+ faa.name as ad_account_name,
+faa.currency as currency,
  sp.plan_name, sp.usd_amount,sp.usd_price_range,sp.price_range, transfer_amount,flag
 FROM
 (
 select distinct payment_id, euid, 
 case when ad_account_id = 'act_1735955147217127' then '1735955147217127' else ad_account_id end as ad_account_id,
 case when transfer_euid is not null then 'Transfered' else 'New' end as flag,
-(transfer_amount)transfer_amount,
+(transfer_amount)transfer_amount,tranferred_at,
 date(usd.created_at) created_at, expiry_date,amount,plan_id
 from user_subscription_data usd 
-where  coalesce(tranferred_at,expiry_date) >= current_date and id!=1952
--- group by 1,2,3,4
+where  expiry_date >= current_date and id!=1952
 order by 3
 )a
 left join 
 fb_ad_accounts faa on concat('act_',a.ad_account_id) = faa.ad_account_id
-left join 
-(
-SELECT ad_account_id,ad_account_name,currency
-FROM
-(
-select ad_account_id,ad_account_name,fb_user_id,row_number() over(partition by ad_account_id order by fb_user_id) as rank,currency
-from 
-(select * from enterprise_facebook_ad_account
-)a
-)a
-where rank=1 
-) efaa
-on a.ad_account_id = efaa.ad_account_id 
 left join subscription_plan sp on a.plan_id = sp.plan_id
 )a
 left JOIN
@@ -199,12 +186,12 @@ euid not in (701,39)
     '''
 
 list_query = '''
-SELECT distinct b.app_business_id as euid, a.ad_account_id, a.name as ad_account_name, b.name as business_manager_name,b.business_manager_id,eu.business_name,eu.company_name,a.currency
+SELECT distinct b.app_business_id as euid, a.ad_account_id, a.name as ad_account_name, b.name as business_manager_name,b.business_manager_id,eu.business_name,eu.company_name,a.currency,a.created_at as ad_account_created_at
 FROM fb_ad_accounts a
 	LEFT JOIN fb_business_managers b ON b.id = a.app_business_manager_id
    left join enterprise_users eu on b.app_business_id=eu.euid
 union all
-SELECT distinct b.app_business_id as euid, a.ad_account_id, a.name as ad_account_name, b.name as business_manager_name,b.business_manager_id,bp.name,bp.brand_name,a.currency
+SELECT distinct b.app_business_id as euid, a.ad_account_id, a.name as ad_account_name, b.name as business_manager_name,b.business_manager_id,bp.name,bp.brand_name,a.currency,a.created_at as ad_account_created_at
 FROM zocket_global.fb_child_ad_accounts a
 	LEFT JOIN zocket_global.fb_child_business_managers b ON b.id = a.app_business_manager_id
    left join zocket_global.business_profile bp on b.app_business_id=bp.id
@@ -258,7 +245,7 @@ SELECT *,case when rw = 1 and prev_status !=1 and account_status = 1 then 'React
 
 FROM
 (
-select eu.euid,COALESCE(b.name,d.name)as name,a.ad_account_id,a.account_status,disable_reason,dateadd('minute',330,a.created_at) as dt,
+select coalesce(eu.euid,cast(bp.buid as int)) as euid,COALESCE(b.name,d.name)as name,a.ad_account_id,a.account_status,disable_reason,dateadd('minute',330,a.created_at) as dt,
 COALESCE(b.currency,d.currency)as currency,
 COALESCE(c.name,e.name)as bm_name,
  row_number() over(partition by a.ad_account_id order by a.created_at desc) as rw,
@@ -270,6 +257,14 @@ left join fb_ad_accounts b on a.ad_account_id = b.ad_account_id
 left join fb_business_managers c on c.id = b.app_business_manager_id
 left join zocket_global.fb_child_ad_accounts d on a.ad_account_id = d.ad_account_id
 left join zocket_global.fb_child_business_managers e on e.id = d.app_business_manager_id
+left join 
+    (SELECT
+    id ,name,brand_name,json_extract_path_text(json_extract_array_element_text(business_user_ids, 0), 'role') AS role,
+    json_extract_path_text(json_extract_array_element_text(business_user_ids, 0), 'business_user_id') AS buid
+FROM
+    zocket_global.business_profile
+WHERE
+    json_extract_path_text(json_extract_array_element_text(business_user_ids, 0), 'role') = 'owner' )bp on e.app_business_id=bp.id
 left join enterprise_users eu on c.app_business_id=eu.euid
 order by 3
 )
@@ -349,7 +344,7 @@ def execute_query(connection, cursor,query):
 
 # df = execute_query(query=query)
 df = execute_query(query=query)
-# sub_df = execute_query(query=sub_query)
+sub_df = execute_query(query=sub_query)
 list_df = execute_query(query=list_query)
 # top_spends_df = execute_query(query=top_spends_query)
 # ai_spends_df = execute_query(query=ai_spends_query)
@@ -399,22 +394,22 @@ df = df.drop_duplicates(subset=['dt', 'ad_account_id'], keep='first')
 
 #Revenue analysis query
 
-# sub_df['euid'] = pd.to_numeric(sub_df['euid'], errors='coerce')
-# sub_df['plan_amount'] = pd.to_numeric(sub_df['plan_amount'], errors='coerce')
-# # sub_df['ad_account_id'] = pd.to_numeric(sub_df['ad_account_id'], errors='coerce')
-# sub_df['sub_start'] = pd.to_datetime(sub_df['sub_start']).dt.date
-# sub_df['sub_end'] = pd.to_datetime(sub_df['sub_end']).dt.date
-# sub_df['total_subscription_days'] = pd.to_numeric(sub_df['total_subscription_days'], errors='coerce')
-# sub_df['subscription_days_completed'] = pd.to_numeric(sub_df['subscription_days_completed'], errors='coerce')
-# sub_df['adspends_added'].fillna(0, inplace=True)
-# sub_df['adspends_added'] = pd.to_numeric(sub_df['adspends_added'], errors='coerce')
-# sub_df['expected_per_day_spend'] = pd.to_numeric(sub_df['expected_per_day_spend'], errors='coerce')
-# sub_df['expected_td_spend'] = pd.to_numeric(sub_df['expected_td_spend'], errors='coerce')
-# sub_df['actual_td_spend'] = pd.to_numeric(sub_df['actual_td_spend'], errors='coerce')
-# sub_df['actual_td_util'] = pd.to_numeric(sub_df['actual_td_util'], errors='coerce')
-# sub_df['expected_util'] = pd.to_numeric(sub_df['expected_util'], errors='coerce')
-# sub_df['overall_util'] = pd.to_numeric(sub_df['overall_util'], errors='coerce')
-# sub_df['rw'] = pd.to_numeric(sub_df['rw'], errors='coerce')
+sub_df['euid'] = pd.to_numeric(sub_df['euid'], errors='coerce')
+sub_df['plan_amount'] = pd.to_numeric(sub_df['plan_amount'], errors='coerce')
+# sub_df['ad_account_id'] = pd.to_numeric(sub_df['ad_account_id'], errors='coerce')
+sub_df['sub_start'] = pd.to_datetime(sub_df['sub_start']).dt.date
+sub_df['sub_end'] = pd.to_datetime(sub_df['sub_end']).dt.date
+sub_df['total_subscription_days'] = pd.to_numeric(sub_df['total_subscription_days'], errors='coerce')
+sub_df['subscription_days_completed'] = pd.to_numeric(sub_df['subscription_days_completed'], errors='coerce')
+sub_df['adspends_added'].fillna(0, inplace=True)
+sub_df['adspends_added'] = pd.to_numeric(sub_df['adspends_added'], errors='coerce')
+sub_df['expected_per_day_spend'] = pd.to_numeric(sub_df['expected_per_day_spend'], errors='coerce')
+sub_df['expected_td_spend'] = pd.to_numeric(sub_df['expected_td_spend'], errors='coerce')
+sub_df['actual_td_spend'] = pd.to_numeric(sub_df['actual_td_spend'], errors='coerce')
+sub_df['actual_td_util'] = pd.to_numeric(sub_df['actual_td_util'], errors='coerce')
+sub_df['expected_util'] = pd.to_numeric(sub_df['expected_util'], errors='coerce')
+sub_df['overall_util'] = pd.to_numeric(sub_df['overall_util'], errors='coerce')
+sub_df['rw'] = pd.to_numeric(sub_df['rw'], errors='coerce')
 
 # #adspends query
 # top_spends_df['dt'] = pd.to_datetime(top_spends_df['dt'])
@@ -454,8 +449,8 @@ df = df[df['dt'] != date.today()]
 with st.sidebar:
     selected = option_menu(
         menu_title="Navigation",  # Required
-        options=["Login","Key Account Stats", "Raw Data","Overall Stats - Ind","Overall Stats - US","Euid - adaccount mapping","Top accounts","FB API Campaign spends","Disabled Ad Accounts","Stripe Transaction","Summary","BM Summary","BID - BUID Mapping","Disabled account anlaysis"],  # Required
-        icons=["lock","airplane-engines", "table","currency-rupee",'currency-dollar','link',"graph-up","suit-spade","slash-circle","credit-card-2-front-fill","book","book-fill","link-45deg","bi-exclamation-octagon-fill"],  # Optional: icons from the Bootstrap library
+        options=["Login","Key Account Stats", "Raw Data","Overall Stats - Ind","Overall Stats - US","Euid - adaccount mapping","BID - BUID Mapping","Top accounts","FB API Campaign spends","Disabled Ad Accounts","Summary","BM Summary","Subscription-Analysis"],  # Required
+        icons=["lock","airplane-engines", "table","currency-rupee",'currency-dollar','link',"link-45deg","graph-up","suit-spade","slash-circle","book","book-fill","book-filled","layout-text-sidebar-reverse"],  # Optional: icons from the Bootstrap library
         menu_icon="cast",  # Optional: main menu icon
         default_index=0,  # Default active menu item
     )
@@ -902,76 +897,75 @@ elif selected == "Overall Stats - US" and st.session_state.status == "verified":
 
 
 
-# elif selected == "Revenue-Analysis" and st.session_state.status == "verified":
+elif selected == "Subscription-Analysis" and st.session_state.status == "verified":
+    # Streamlit App
+    st.title("Ad Subscription Dashboard")
 
+    # Currency Filter
+    currency_option = st.selectbox("Select Currency", ["India", "US"])
+    if currency_option == "India":
+        currency_filter = "INR"
+        filtered_df = sub_df[sub_df['currency'] == currency_filter].reset_index(drop=True)
+    elif currency_option == "US":
+        currency_filter = "INR"
+        filtered_df = sub_df[sub_df['currency'] != currency_filter]
+    # else:
+    #     filtered_df = sub_df  # Show all data if "All" is selected
 
-#     # Streamlit App
-#     st.title("Ad Subscription Dashboard")
+    filtered_df = filtered_df[filtered_df['rw']==1]
+    # Key Metrics Display
+    st.header("Key Metrics")
 
-#     # Currency Filter
-#     currency_option = st.selectbox("Select Currency", ["India", "US"])
-#     if currency_option == "India":
-#         currency_filter = "INR"
-#         filtered_df = sub_df[sub_df['currency'] == currency_filter].reset_index(drop=True)
-#     elif currency_option == "US":
-#         currency_filter = "INR"
-#         filtered_df = sub_df[sub_df['currency'] != currency_filter]
-#     # else:
-#     #     filtered_df = sub_df  # Show all data if "All" is selected
+    # Arrange key metrics in columns for better layout
+    col1, col2, col3, col4 = st.columns(4)
 
-#     # Key Metrics Display
-#     st.header("Key Metrics")
+    # Calculations for metrics
+    total_accounts = filtered_df['ad_account_id'].nunique()
+    total_subscription_amount = filtered_df['plan_amount'].sum()
+    avg_plan_amount = filtered_df['plan_amount'].mean()
+    avg_utilization = filtered_df['actual_td_util'].mean()
+    total_spend = filtered_df['actual_td_spend'].sum()
+    expected_spend = filtered_df['expected_td_spend'].sum()
 
-#     # Arrange key metrics in columns for better layout
-#     col1, col2, col3, col4 = st.columns(4)
+    # Display metrics in columns
+    col1.metric("Total Accounts", total_accounts)
+    col2.metric("Total Subscription Amount", f"{total_subscription_amount:,.2f}")
+    col3.metric("Average Plan Amount", f"{avg_plan_amount:,.2f}")
+    col4.metric("Average Utilization (%)", f"{avg_utilization:.2f}%")
 
-#     # Calculations for metrics
-#     total_accounts = filtered_df['ad_account_id'].nunique()
-#     total_subscription_amount = filtered_df['plan_amount'].sum()
-#     avg_plan_amount = filtered_df['plan_amount'].mean()
-#     avg_utilization = filtered_df['actual_td_util'].mean()
-#     total_spend = filtered_df['actual_td_spend'].sum()
-#     expected_spend = filtered_df['expected_td_spend'].sum()
+    col1.metric("Total Spend", f"{total_spend:,.2f}")
+    col2.metric("Expected Spend", f"{expected_spend:,.2f} ")
 
-#     # Display metrics in columns
-#     col1.metric("Total Accounts", total_accounts)
-#     col2.metric("Total Subscription Amount", f"{total_subscription_amount:,.2f}")
-#     col3.metric("Average Plan Amount", f"{avg_plan_amount:,.2f}")
-#     col4.metric("Average Utilization (%)", f"{avg_utilization:.2f}%")
+    # Define filter categories
+    no_adspends = filtered_df[filtered_df['adspends_added'] == 0].reset_index(drop=True)
+    need_attention = filtered_df[filtered_df['actual_td_util'] < 30].reset_index(drop=True)
+    potential_upgrade = filtered_df[filtered_df['actual_td_util'] > 70].reset_index(drop=True)
+    upcoming_renewals = filtered_df[filtered_df['sub_end'] <= date.today() + timedelta(days=7)].reset_index(drop=True)
 
-#     col1.metric("Total Spend", f"{total_spend:,.2f}")
-#     col2.metric("Expected Spend", f"{expected_spend:,.2f} ")
+    #All the active accounts
+    st.subheader("Active Subscriptions")
+    st.metric("Number of Accounts", filtered_df.shape[0])
+    st.dataframe(filtered_df)
 
-#     # Define filter categories
-#     no_adspends = filtered_df[filtered_df['adspends_added'] == 0].reset_index(drop=True)
-#     need_attention = filtered_df[filtered_df['actual_td_util'] < 30].reset_index(drop=True)
-#     potential_upgrade = filtered_df[filtered_df['actual_td_util'] > 70].reset_index(drop=True)
-#     upcoming_renewals = filtered_df[filtered_df['sub_end'] <= date.today() + timedelta(days=7)].reset_index(drop=True)
+    # Display the number of accounts per category with metrics
+    st.header("Account Divisions")
 
-#     #All the active accounts
-#     st.subheader("Active Subscriptions")
-#     st.metric("Number of Accounts", filtered_df.shape[0])
-#     st.dataframe(filtered_df)
+    # Categories metrics display
+    st.subheader("Subscription with No Adspends")
+    st.metric("Number of Accounts", no_adspends.shape[0])
+    st.dataframe(no_adspends)
 
-#     # Display the number of accounts per category with metrics
-#     st.header("Account Divisions")
+    st.subheader("Ad Accounts that Need Attention")
+    st.metric("Number of Accounts", need_attention.shape[0])
+    st.dataframe(need_attention)
 
-#     # Categories metrics display
-#     st.subheader("Subscription with No Adspends")
-#     st.metric("Number of Accounts", no_adspends.shape[0])
-#     st.dataframe(no_adspends)
+    st.subheader("Potential Upgrades")
+    st.metric("Number of Accounts", potential_upgrade.shape[0])
+    st.dataframe(potential_upgrade)
 
-#     st.subheader("Ad Accounts that Need Attention")
-#     st.metric("Number of Accounts", need_attention.shape[0])
-#     st.dataframe(need_attention)
-
-#     st.subheader("Potential Upgrades")
-#     st.metric("Number of Accounts", potential_upgrade.shape[0])
-#     st.dataframe(potential_upgrade)
-
-#     st.subheader("Upcoming Renewals")
-#     st.metric("Number of Accounts", upcoming_renewals.shape[0])
-#     st.dataframe(upcoming_renewals)
+    st.subheader("Upcoming Renewals")
+    st.metric("Number of Accounts", upcoming_renewals.shape[0])
+    st.dataframe(upcoming_renewals)
     
 
 elif selected == "Euid - adaccount mapping" and st.session_state.status == "verified":
@@ -1275,7 +1269,7 @@ elif selected == "FB API Campaign spends" and st.session_state.status == "verifi
     yesterday = today - timedelta(days=1)
 
 
-       # Assuming your 'dt' column is already in date format (e.g., YYYY-MM-DD)
+    # Assuming your 'dt' column is already in date format (e.g., YYYY-MM-DD)
     if grouping == 'Year':
         ai_campaign_spends_df.loc[:, 'grouped_date'] = ai_campaign_spends_df['dt'].apply(lambda x: x.strftime('%Y'))  # Year format as 2024
     elif grouping == 'Month':
@@ -1466,6 +1460,11 @@ elif selected == "Disabled Ad Accounts" and st.session_state.status == "verified
 
     flag = st.selectbox("Select Disabled/Reactived", ("Disabled", "Reactivated"))
 
+    disabled_account_df = disabled_account_df.merge(roposo_acc_list_df, left_on='ad_account_id', right_on='Roposo', how='left')
+
+    disabled_account_df['Roposo'] = disabled_account_df['Roposo'].fillna('')
+    disabled_account_df['Roposo'] = disabled_account_df['Roposo'].apply(lambda x: 'Roposo' if x != '' else 'Others')
+    
     st.title(f"{flag} Ad Accounts")
 
     if flag == "Disabled":
@@ -1610,92 +1609,92 @@ elif selected == "Disabled Ad Accounts" and st.session_state.status == "verified
    
 
 
-elif selected == "Stripe Transaction" and st.session_state.status == "verified":
+# elif selected == "Stripe Transaction" and st.session_state.status == "verified":
 
-    # Set your Stripe API key here
-    stripe.api_key = stripe_key
+#     # Set your Stripe API key here
+#     stripe.api_key = stripe_key
 
-    def get_balance_transaction_fee(balance_transaction_id):
-        try:
-            balance_txn = stripe.BalanceTransaction.retrieve(balance_transaction_id)
-            fee_amount = balance_txn.fee  # in cents
-            currency = balance_txn.currency.upper()
-            return fee_amount, currency
-        except Exception:
-            return None, None
+#     def get_balance_transaction_fee(balance_transaction_id):
+#         try:
+#             balance_txn = stripe.BalanceTransaction.retrieve(balance_transaction_id)
+#             fee_amount = balance_txn.fee  # in cents
+#             currency = balance_txn.currency.upper()
+#             return fee_amount, currency
+#         except Exception:
+#             return None, None
 
-    def get_last_100_charges_by_billing_email(email):
+#     def get_last_100_charges_by_billing_email(email):
 
-        # Fetch the last 100 charges
-        charges = stripe.Charge.list(limit=100)
+#         # Fetch the last 100 charges
+#         charges = stripe.Charge.list(limit=100)
         
-        # Filter by billing_details.email
-        matched_charges = [c for c in charges.data if c.billing_details and c.billing_details.email == email]
-        return matched_charges
+#         # Filter by billing_details.email
+#         matched_charges = [c for c in charges.data if c.billing_details and c.billing_details.email == email]
+#         return matched_charges
 
-    # Streamlit UI
-    st.title("Stripe Payments by Email - Last 100 Charges")
+#     # Streamlit UI
+#     st.title("Stripe Payments by Email - Last 100 Charges")
 
-    # Input email
-    email = st.text_input("Enter the Email to find charges")
+#     # Input email
+#     email = st.text_input("Enter the Email to find charges")
 
-    if st.button("Find Payments"):
-        if email:
-            with st.spinner("Searching the last 100 charges..."):
-                transactions = get_last_100_charges_by_billing_email(email)
+#     if st.button("Find Payments"):
+#         if email:
+#             with st.spinner("Searching the last 100 charges..."):
+#                 transactions = get_last_100_charges_by_billing_email(email)
                 
-                if not transactions:
-                    st.error(f"No transactions found for Email '{email}' in the last 100 charges.")
-                else:
-                    st.success(f"Found {len(transactions)} transaction(s) for Email '{email}'!")
+#                 if not transactions:
+#                     st.error(f"No transactions found for Email '{email}' in the last 100 charges.")
+#                 else:
+#                     st.success(f"Found {len(transactions)} transaction(s) for Email '{email}'!")
                     
-                    # Prepare data for DataFrame
-                    data = []
-                    for transaction in transactions:
-                        # Retrieve fee if possible
-                        fee_amount, fee_currency = (None, None)
-                        if transaction.balance_transaction:
-                            fee_amount, fee_currency = get_balance_transaction_fee(transaction.balance_transaction)
+#                     # Prepare data for DataFrame
+#                     data = []
+#                     for transaction in transactions:
+#                         # Retrieve fee if possible
+#                         fee_amount, fee_currency = (None, None)
+#                         if transaction.balance_transaction:
+#                             fee_amount, fee_currency = get_balance_transaction_fee(transaction.balance_transaction)
                         
-                        amount = transaction.amount / 100
-                        currency = transaction.currency.upper()
-                        status = transaction.status.capitalize()
-                        description = transaction.description or "No description"
-                        date_str = datetime.utcfromtimestamp(transaction.created).strftime('%Y-%m-%d %H:%M:%S UTC')
-                        payment_intent = transaction.payment_intent
-                        charge_id = transaction.id
-                        final_email = transaction.billing_details.email
+#                         amount = transaction.amount / 100
+#                         currency = transaction.currency.upper()
+#                         status = transaction.status.capitalize()
+#                         description = transaction.description or "No description"
+#                         date_str = datetime.utcfromtimestamp(transaction.created).strftime('%Y-%m-%d %H:%M:%S UTC')
+#                         payment_intent = transaction.payment_intent
+#                         charge_id = transaction.id
+#                         final_email = transaction.billing_details.email
 
-                        fee_str = f"{(fee_amount / 100):.2f} {fee_currency}" if fee_amount is not None else "N/A"
+#                         fee_str = f"{(fee_amount / 100):.2f} {fee_currency}" if fee_amount is not None else "N/A"
                         
-                        data.append({
-                            "Charge ID": charge_id,
-                            "Payment Intent ID": payment_intent,
-                            "Status": status,
-                            "Currency": currency,
-                            "Amount": f"{amount:.2f} {currency}",
-                            "Stripe Processing Fee": fee_str,
-                            "Date": date_str,
-                            "Description": description,
-                            "Billing Email Used": final_email
-                        })
+#                         data.append({
+#                             "Charge ID": charge_id,
+#                             "Payment Intent ID": payment_intent,
+#                             "Status": status,
+#                             "Currency": currency,
+#                             "Amount": f"{amount:.2f} {currency}",
+#                             "Stripe Processing Fee": fee_str,
+#                             "Date": date_str,
+#                             "Description": description,
+#                             "Billing Email Used": final_email
+#                         })
                     
-                    df = pd.DataFrame(data)
+#                     df = pd.DataFrame(data)
                     
-                    # Filter to show only succeeded transactions
-                    df = df[df['Status'] == 'Succeeded']
+#                     # Filter to show only succeeded transactions
+#                     df = df[df['Status'] == 'Succeeded']
 
-                    # Display the DataFrame as a table
-                    st.write("### Transactions Details")
-                    st.dataframe(df)
-        else:
-            st.warning("Please enter a valid email address.")
+#                     # Display the DataFrame as a table
+#                     st.write("### Transactions Details")
+#                     st.dataframe(df)
+#         else:
+#             st.warning("Please enter a valid email address.")
 
 
 elif selected == "Summary" and st.session_state.status == "verified":
 
 
-    bm = st.selectbox("Choose BM", ["All", "IND BM", "US BM"], index=0)
+    bm = st.selectbox("Choose BM", ["IND BM", "US BM"], index=0)
 
     if bm=="IND BM":
         df = df[df['currency_code'] == "INR"]
@@ -1808,6 +1807,55 @@ elif selected == "Summary" and st.session_state.status == "verified":
 
     st.write(f"{bm} Spend Summary")
     st.dataframe(summary_df)
+    
+    st.title("Disabled Account Analysis")
+
+    # Merge disabled_account_df with list_df on 'ad_account_id'
+    merged_df = list_df.merge(disabled_account_df,on='ad_account_id', how='left')
+
+    # Fill 'flag' column in merged_df with 'Active' where it is null or empty
+    merged_df['flag'] = merged_df['flag'].fillna('Active')
+    merged_df['flag'] = merged_df['flag'].replace('', 'Active')
+
+    merged_df = merged_df [['euid_x','ad_account_id','ad_account_name_x','currency_x','flag','disable_date','reactivation_date','disable_reason','business_name','company_name','business_manager_name','business_manager_id','ad_account_created_at']]
+
+    merged_df = merged_df.rename(columns={'ad_account_name_x':'ad_account_name','currency_x':'currency'})
+    
+    merged_df = merged_df.merge(roposo_acc_list_df, left_on='ad_account_id', right_on='Roposo', how='left')
+
+
+    merged_df['Roposo'] = merged_df['Roposo'].fillna('')
+    merged_df['Roposo'] = merged_df['Roposo'].apply(lambda x: 'Roposo' if x != '' else 'Others')
+
+
+    st.write("Final DataFrame:")
+    st.dataframe(merged_df, use_container_width=True)
+
+    st.write("EUID X Disabled/Reactivated Accounts")
+    df_counts = merged_df.groupby(['euid_x','flag']).size().reset_index(name='counts')
+    df_pivot = df_counts.pivot(index='euid_x', columns='flag', values='counts')
+    df_pivot['Total'] = df_pivot.sum(axis=1)
+    st.dataframe(df_pivot, use_container_width=True)
+
+    merged_df_monthly = merged_df.groupby([merged_df['ad_account_created_at'].dt.to_period('M'), 'flag']).size().reset_index(name='counts')
+    st.write("Monthly Ad account creation VS Disabled/Reactivated Accounts")
+    merged_df_monthly = merged_df_monthly.pivot(index='ad_account_created_at', columns='flag', values='counts')
+    merged_df_monthly['Total'] = merged_df_monthly.sum(axis=1)
+    st.dataframe(merged_df_monthly, use_container_width=True)
+
+    daterange = st.date_input("Select Date Range", value=[datetime.now() - timedelta(days=30), datetime.now()])
+
+    df = df[df['dt'] >= daterange[0]]
+    df = df[df['dt'] <= daterange[1]]
+
+    df = df.groupby('ad_account_id', as_index=False).agg({'spend': 'sum'})
+    merged_df = merged_df.merge(df, on='ad_account_id', how='left')
+
+    merged_df['spend'] = merged_df['spend'].fillna(0)
+
+    st.dataframe(merged_df, use_container_width=True)
+
+
 
 
 elif selected == "BM Summary" and st.session_state.status == "verified":
@@ -1925,42 +1973,3 @@ elif selected == "BID - BUID Mapping" and st.session_state.status == "verified":
     # buid_selection = st.number_input("Enter BUID", min_value=0, step=1, key='buid')
 
     # st.dataframe(bid_buid_df[bid_buid_df['buid']==buid_selection], use_container_width=True)
-
-elif selected == "Disabled account anlaysis" and st.session_state.status == "verified":
-
-    st.title("Disabled Account Analysis")
-
-    st.title("All accounts list")
-    st.dataframe(list_df, use_container_width=True)
-
-    disabled_account_df = disabled_account_df.sort_values(by='disable_date', ascending=False)
-
-    # Merge disabled_account_df with list_df on 'ad_account_id'
-    merged_df = list_df.merge(disabled_account_df,on='ad_account_id', how='left')
-
-    # Fill 'flag' column in merged_df with 'Active' where it is null or empty
-    merged_df['flag'] = merged_df['flag'].fillna('Active')
-    merged_df['flag'] = merged_df['flag'].replace('', 'Active')
-
-    # Display the merged DataFrame
-    st.write("Merged DataFrame:")
-    st.dataframe(merged_df, use_container_width=True)
-
-    merged_df = merged_df [['euid_x','ad_account_id','ad_account_name_x','currency_x','flag','disable_date','reactivation_date','disable_reason','business_name','company_name','business_manager_name','business_manager_id']]
-
-    st.write("Final DataFrame:")
-    st.dataframe(merged_df, use_container_width=True)
-
-    st.dataframe(merged_df.groupby(['euid_x','flag']).size().reset_index(name='counts'), use_container_width=True)
-
-    daterange = st.date_input("Select Date Range", value=[datetime.now() - timedelta(days=30), datetime.now()])
-
-    df = df[df['dt'] >= daterange[0]]
-    df = df[df['dt'] <= daterange[1]]
-
-    df = df.groupby('ad_account_id', as_index=False).agg({'spend': 'sum'})
-    merged_df = merged_df.merge(df, on='ad_account_id', how='left')
-
-    merged_df['spend'] = merged_df['spend'].fillna(0)
-
-    st.dataframe(merged_df, use_container_width=True)

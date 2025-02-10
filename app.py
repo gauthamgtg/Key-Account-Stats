@@ -191,10 +191,17 @@ FROM fb_ad_accounts a
 	LEFT JOIN fb_business_managers b ON b.id = a.app_business_manager_id
    left join enterprise_users eu on b.app_business_id=eu.euid
 union all
-SELECT distinct b.app_business_id as euid, a.ad_account_id, a.name as ad_account_name, b.name as business_manager_name,b.business_manager_id,bp.name,bp.brand_name,a.currency,a.created_at as ad_account_created_at
+SELECT cast(bp.buid as int) as euid, a.ad_account_id, a.name as ad_account_name, b.name as business_manager_name,b.business_manager_id,bp.name,bp.brand_name,a.currency,a.created_at as ad_account_created_at
 FROM zocket_global.fb_child_ad_accounts a
 	LEFT JOIN zocket_global.fb_child_business_managers b ON b.id = a.app_business_manager_id
-   left join zocket_global.business_profile bp on b.app_business_id=bp.id
+   left join 
+    (SELECT
+    id ,name,brand_name,json_extract_path_text(json_extract_array_element_text(business_user_ids, 0), 'role') AS role,
+    json_extract_path_text(json_extract_array_element_text(business_user_ids, 0), 'business_user_id') AS buid
+FROM
+    zocket_global.business_profile
+WHERE
+    json_extract_path_text(json_extract_array_element_text(business_user_ids, 0), 'role') = 'owner' )bp on b.app_business_id=bp.id
  '''
 
 #adlevel query
@@ -712,12 +719,14 @@ elif selected == "Overall Stats - Ind" and st.session_state.status == "verified"
     
     # Filter the DataFrame to get the current month’s data
     ind_current_month_df = indian_df[pd.to_datetime(indian_df['dt']).dt.to_period('M') == pd.to_datetime('today').to_period('M')]
+    ind_last_month_df = indian_df[pd.to_datetime(indian_df['dt']).dt.to_period('M') == (pd.to_datetime('today') - pd.DateOffset(months=1)).to_period('M')]
 
     # Calculate the total spend for the current month
     ind_current_month_spend = ind_current_month_df['spend'].sum()
+    ind_last_month_spend = ind_last_month_df['spend'].sum()
 
     # Display the metrics
-    col1, col2, col3 = st.columns(3)
+    col1, col2, col3, col4 = st.columns(4)
 
     # Metric 1: Yesterday's Spend and change %
     col1.metric("Yesterday Spend", f"₹{ind_yst_spend}", f"{ind_spend_change:,.2f}%")
@@ -730,6 +739,9 @@ elif selected == "Overall Stats - Ind" and st.session_state.status == "verified"
 
     # Display the current month spend as a metric
     col3.metric(label="Current Month Spend", value=f"₹{ind_current_month_spend:}")
+
+    # Metric 4: Last Month Spend and change %
+    col4.metric("Last Month Spend", f"₹{ind_last_month_spend:,.2f}")
 
     #add a pivot 
 
@@ -757,6 +769,11 @@ elif selected == "Overall Stats - Ind" and st.session_state.status == "verified"
 
     # #Dataframe grouped by month and year of dt
     # ind_grouped_data_adacclevel = indian_df[indian_df['dt'].dt.month == current_month].groupby([pd.to_datetime(indian_df['dt']).dt.strftime('%b %y'), 'euid'])['spend'].sum().reset_index(name='spend').sort_values(by='spend', ascending=False)
+    st.dataframe(ind_grouped_data_adacclevel, use_container_width=True)
+
+    st.write("Last Month spend data:")
+    ind_grouped_data_adacclevel = ind_last_month_df.groupby([pd.to_datetime(ind_last_month_df['dt']).dt.strftime('%b %y'), 'euid','ad_account_id','ad_account_name','currency_code','business_name','company_name'])['spend'].sum().reset_index(name='spend').sort_values(by='spend', ascending=False).reset_index(drop=True)
+    ind_grouped_data_adacclevel.index += 1
     st.dataframe(ind_grouped_data_adacclevel, use_container_width=True)
 
     # Get top 10 overall spending ad accounts
@@ -859,12 +876,14 @@ elif selected == "Overall Stats - US" and st.session_state.status == "verified":
 
         # Filter the DataFrame to get the current month’s data
     us_current_month_df = us_df[pd.to_datetime(us_df['dt']).dt.to_period('M') == pd.to_datetime('today').to_period('M')]
+    us_last_month_df = us_df[pd.to_datetime(us_df['dt']).dt.to_period('M') == (pd.to_datetime('today') - pd.DateOffset(months=1)).to_period('M')]
 
     # Calculate the total spend for the current month
     us_current_month_spend = us_current_month_df['spend'].sum()
+    us_last_month_spend = us_last_month_df['spend'].sum()
 
     # Display the metrics
-    col1, col2, col3 = st.columns(3)
+    col1, col2, col3, col4 = st.columns(4)
 
     # Metric 1: Yesterday's Spend and change %
     col1.metric("Yesterday Spend", f"${us_yst_spend}", f"{us_spend_change}%")
@@ -875,11 +894,19 @@ elif selected == "Overall Stats - US" and st.session_state.status == "verified":
     # Display the current month spend as a metric
     col3.metric(label="Current Month Spend (in USD)", value=f"${us_current_month_spend:}")
 
+    # Display the last month spend as a metric
+    col4.metric("Last Month Spend", f"${us_last_month_spend:,.2f}")
+
     st.write("Yesterday spend data:")
     st.dataframe(us_df[us_df['dt']==yesterday].sort_values(by='spend_in_usd', ascending=False).reset_index(drop=True), use_container_width=True)
     
     st.write("Current Month spend data:")
     us_grouped_data_adacclevel = us_current_month_df.groupby([pd.to_datetime(us_current_month_df['dt']).dt.strftime('%b %y'), 'euid', 'ad_account_id', 'ad_account_name', 'currency_code'])[[ 'spend','spend_in_usd']].sum().sort_values(by='spend_in_usd', ascending=False).reset_index()
+    us_grouped_data_adacclevel.index += 1
+    st.dataframe(us_grouped_data_adacclevel, use_container_width=True)
+
+    st.write("Last month spend data:")
+    us_grouped_data_adacclevel = us_last_month_df.groupby([pd.to_datetime(us_last_month_df['dt']).dt.strftime('%b %y'), 'euid', 'ad_account_id', 'ad_account_name', 'currency_code'])[[ 'spend','spend_in_usd']].sum().sort_values(by='spend_in_usd', ascending=False).reset_index()
     us_grouped_data_adacclevel.index += 1
     st.dataframe(us_grouped_data_adacclevel, use_container_width=True)
 

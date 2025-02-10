@@ -456,8 +456,8 @@ df = df[df['dt'] != date.today()]
 with st.sidebar:
     selected = option_menu(
         menu_title="Navigation",  # Required
-        options=["Login","Key Account Stats", "Raw Data","Overall Stats - Ind","Overall Stats - US","Euid - adaccount mapping","BID - BUID Mapping","Top accounts","FB API Campaign spends","Disabled Ad Accounts","Summary","BM Summary","Subscription-Analysis"],  # Required
-        icons=["lock","airplane-engines", "table","currency-rupee",'currency-dollar','link',"link-45deg","graph-up","suit-spade","slash-circle","book","book-fill","book-filled","layout-text-sidebar-reverse"],  # Optional: icons from the Bootstrap library
+        options=["Login","Key Account Stats","Overall Stats - Ind","Overall Stats - US","Euid - adaccount mapping","BID - BUID Mapping","Top accounts","FB API Campaign spends","Disabled Ad Accounts","Summary","BM Summary","Subscription-Analysis", "Raw Data"],  # Required
+        icons=["lock","airplane-engines","currency-rupee",'currency-dollar','link',"link-45deg","graph-up","suit-spade","slash-circle","book","book-fill","book-filled","dice-6-fill", "table"],  # Optional: icons from the Bootstrap library
         menu_icon="cast",  # Optional: main menu icon
         default_index=0,  # Default active menu item
     )
@@ -645,43 +645,6 @@ if selected == "Key Account Stats" and st.session_state.status == "verified":
 
     #display full table
 
-elif selected == "Raw Data" and st.session_state.status == "verified":
-    st.title("Raw Data Page")
-    st.write("This is where raw data will be displayed.")
-
-    st.write("acc list")
-    st.dataframe(account_list_df, use_container_width=True)
-
-    st.write("datong_acc_list_df dump")
-    st.dataframe(datong_acc_list_df, use_container_width=True)
-
-    st.write("roposo acc list dump")
-    st.dataframe(roposo_acc_list_df, use_container_width=True)
-
-    st.write("Ad spends raw dump")
-    st.dataframe(df, use_container_width=True)
-
-    # st.write("Subscriptions raw dump")
-    # st.dataframe(sub_df, use_container_width=True)
-
-    st.write("Ad account and EUID list raw dump")
-    st.dataframe(list_df, use_container_width=True)
-
-    # st.write("Zocket AI Spends raw dump")
-    # st.dataframe(ai_spends_df, use_container_width=True)
-
-    st.write("FBI API spends raw dump")
-    st.dataframe(ai_campaign_spends_df, use_container_width=True)
-
-    st.write("Disabled accounts raw dump")
-    st.dataframe(disabled_account_df, use_container_width=True)
-
-    # st.write("Datong API raw dump")
-    # st.dataframe(datong_api_df, use_container_width=True)
-
-    st.write("FBI API spends raw dump")
-    st.dataframe(ai_campaign_spends_df, use_container_width=True)
-
 
 elif selected == "Overall Stats - Ind" and st.session_state.status == "verified":
 
@@ -782,6 +745,24 @@ elif selected == "Overall Stats - Ind" and st.session_state.status == "verified"
     st.write("Top 10 Overall Spending Ad Accounts:")
     st.dataframe(top_spending_ad_accounts, use_container_width=True)
 
+    indian_df['euid'].replace('Unknown', 0, inplace=True)
+    # Group by
+    grouping = st.selectbox("Group by", ["Year", "Month", "Date"])
+    if grouping == "Year":
+        grouped_df = indian_df.groupby([pd.to_datetime(indian_df['dt']).dt.year, 'euid', 'ad_account_id', 'ad_account_name', 'currency_code'])['spend'].sum().reset_index()
+    elif grouping == "Month":
+        grouped_df = indian_df.groupby([pd.to_datetime(indian_df['dt']).dt.strftime('%b %y'), 'euid', 'ad_account_id', 'ad_account_name', 'currency_code'])['spend'].sum().reset_index()
+    else:  # Date
+        grouped_df = indian_df.groupby([pd.to_datetime(indian_df['dt']).dt.strftime('%Y-%m-%d'), 'euid', 'ad_account_id', 'ad_account_name', 'currency_code'])['spend'].sum().reset_index()
+
+    st.write(f"Spend Data Grouped by {grouping}:")
+    grouped_df.index += 1
+    grouped_df = grouped_df.sort_values(by='dt', ascending=False)
+    # st.dataframe(grouped_df, use_container_width=True)
+    pivot_df = grouped_df.pivot(index=['euid','ad_account_name','ad_account_id','currency_code'], columns='dt', values='spend')
+    pivot_df = pivot_df.reindex(sorted(pivot_df.columns, reverse=True), axis=1)
+    st.dataframe(pivot_df, use_container_width=True)
+
 
 elif selected == "Overall Stats - US" and st.session_state.status == "verified":
 
@@ -820,19 +801,20 @@ elif selected == "Overall Stats - US" and st.session_state.status == "verified":
     default_values = {
                         'EUR': 1.05,
                         'GBP': 1.27,
-                        'AUD': 0.65
+                        'AUD': 0.65,
+                        'CAD': 0.70
                     }
 
     # Display input boxes for each unique currency code other than 'USD'
     st.write("Enter conversion rates for the following currencies:")
    
     # Create columns dynamically based on the number of currencies
-    cols = st.columns(3)  # Adjust the number of columns (3 in this case)
+    cols = st.columns(4)  # Adjust the number of columns (3 in this case)
 
     # Iterate over non-USD currencies and display them in columns
     for idx, currency in enumerate(non_usd_currencies):
         default_value = default_values.get(currency, 1.0)  # Use default value if defined, otherwise 1.0
-        with cols[idx % 3]:  # Rotate through the columns
+        with cols[idx % 4]:  # Rotate through the columns
             conversion_rates[currency] = st.number_input(
                 f"{currency} to USD:", value=default_value, min_value=0.0, step=0.001, format="%.3f"
             )
@@ -921,6 +903,23 @@ elif selected == "Overall Stats - US" and st.session_state.status == "verified":
     )
 
     st.dataframe(top_spenders, use_container_width=True)
+
+    # Group by
+    grouping = st.selectbox("Group by", ["Year", "Month", "Date"])
+    if grouping == "Year":
+        grouped_df = us_df.groupby([pd.to_datetime(us_df['dt']).dt.year, 'euid', 'ad_account_id', 'ad_account_name', 'currency_code'])['spend_in_usd'].sum().reset_index()
+    elif grouping == "Month":
+        grouped_df = us_df.groupby([pd.to_datetime(us_df['dt']).dt.strftime('%b %y'), 'euid', 'ad_account_id', 'ad_account_name', 'currency_code'])['spend_in_usd'].sum().reset_index()
+    else:  # Date
+        grouped_df = us_df.groupby([pd.to_datetime(us_df['dt']).dt.strftime('%Y-%m-%d'), 'euid', 'ad_account_id', 'ad_account_name', 'currency_code'])['spend_in_usd'].sum().reset_index()
+
+    st.write(f"Spend Data Grouped by {grouping}:")
+    grouped_df.index += 1
+    grouped_df = grouped_df.sort_values(by='dt', ascending=False)
+    # st.dataframe(grouped_df, use_container_width=True)
+    pivot_df = grouped_df.pivot(index=['euid','ad_account_name','ad_account_id','currency_code'], columns='dt', values='spend_in_usd')
+    pivot_df = pivot_df.reindex(sorted(pivot_df.columns, reverse=True), axis=1)
+    st.dataframe(pivot_df, use_container_width=True)
 
 
 
@@ -2000,3 +1999,44 @@ elif selected == "BID - BUID Mapping" and st.session_state.status == "verified":
     # buid_selection = st.number_input("Enter BUID", min_value=0, step=1, key='buid')
 
     # st.dataframe(bid_buid_df[bid_buid_df['buid']==buid_selection], use_container_width=True)
+
+
+
+
+elif selected == "Raw Data" and st.session_state.status == "verified":
+    st.title("Raw Data Page")
+    st.write("This is where raw data will be displayed.")
+
+    st.write("acc list")
+    st.dataframe(account_list_df, use_container_width=True)
+
+    st.write("datong_acc_list_df dump")
+    st.dataframe(datong_acc_list_df, use_container_width=True)
+
+    st.write("roposo acc list dump")
+    st.dataframe(roposo_acc_list_df, use_container_width=True)
+
+    st.write("Ad spends raw dump")
+    st.dataframe(df, use_container_width=True)
+
+    # st.write("Subscriptions raw dump")
+    # st.dataframe(sub_df, use_container_width=True)
+
+    st.write("Ad account and EUID list raw dump")
+    st.dataframe(list_df, use_container_width=True)
+
+    # st.write("Zocket AI Spends raw dump")
+    # st.dataframe(ai_spends_df, use_container_width=True)
+
+    st.write("FBI API spends raw dump")
+    st.dataframe(ai_campaign_spends_df, use_container_width=True)
+
+    st.write("Disabled accounts raw dump")
+    st.dataframe(disabled_account_df, use_container_width=True)
+
+    # st.write("Datong API raw dump")
+    # st.dataframe(datong_api_df, use_container_width=True)
+
+    st.write("FBI API spends raw dump")
+    st.dataframe(ai_campaign_spends_df, use_container_width=True)
+

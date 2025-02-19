@@ -1862,9 +1862,26 @@ elif selected == "Summary" and st.session_state.status == "verified":
     df_pivot = df_counts.pivot(index='euid_x', columns='flag', values='counts')
     df_pivot['Total'] = df_pivot.sum(axis=1)
     st.dataframe(df_pivot, use_container_width=True)
+    
+    currency_options = ['All','INR','USD']
+    currency = st.selectbox("Select BM", currency_options)
+    if currency == 'All':
+        merged_df = merged_df
+    elif currency == 'INR':
+        merged_df = merged_df[merged_df['currency'] == 'INR']
+    else:
+        merged_df = merged_df[merged_df['currency'] != 'INR']
 
-    merged_df_monthly = merged_df.groupby([merged_df['ad_account_created_at'].dt.to_period('M'), 'flag']).size().reset_index(name='counts')
-    st.write("Monthly Ad account creation VS Disabled/Reactivated Accounts")
+    flag_options = ['All'] + list(merged_df['Roposo'].unique())
+    flag = st.selectbox("Select Flag", flag_options)
+    if flag == 'All':
+        merged_df = merged_df
+    else:
+        merged_df = merged_df[merged_df['Roposo'] == flag]
+
+
+    merged_df_monthly = merged_df.groupby([merged_df['ad_account_created_at'].dt.to_period('M'), 'flag'])['ad_account_id'].nunique().reset_index(name='unique_ad_account_ids')
+    st.write("Monthly Unique Ad Account Creation VS Disabled/Reactivated Accounts")
     merged_df_monthly = merged_df_monthly.pivot(index='ad_account_created_at', columns='flag', values='counts')
     merged_df_monthly['Total'] = merged_df_monthly.sum(axis=1)
     st.dataframe(merged_df_monthly, use_container_width=True)

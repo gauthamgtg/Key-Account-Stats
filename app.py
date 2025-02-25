@@ -1882,7 +1882,7 @@ elif selected == "Summary" and st.session_state.status == "verified":
 
     merged_df_monthly = merged_df.groupby([merged_df['ad_account_created_at'].dt.to_period('M'), 'flag'])['ad_account_id'].nunique().reset_index(name='unique_ad_account_ids')
     st.write("Monthly Unique Ad Account Creation VS Disabled/Reactivated Accounts")
-    merged_df_monthly = merged_df_monthly.pivot(index='ad_account_created_at', columns='flag', values='counts')
+    merged_df_monthly = merged_df_monthly.pivot(index='ad_account_created_at', columns='flag', values='unique_ad_account_ids')
     merged_df_monthly['Total'] = merged_df_monthly.sum(axis=1)
     st.dataframe(merged_df_monthly, use_container_width=True)
 

@@ -370,6 +370,7 @@ account_list_df = pd.read_csv(url)
 # Create a DataFrame for each column
 datong_acc_list_df = account_list_df[['Datong']].dropna(inplace=False)
 roposo_acc_list_df = account_list_df[['Roposo','Media_Buyer']].dropna(inplace=False)
+shiprocket_acc_list_df = account_list_df[['Shiprocket']].dropna(inplace=False)
 
 top_customers_flag = []
 for index, row in df.iterrows():
@@ -377,6 +378,8 @@ for index, row in df.iterrows():
         top_customers_flag.append('Datong')
     elif row['dt'] > datetime(2024, 9, 30).date() and row['ad_account_id'] in roposo_acc_list_df.values:
         top_customers_flag.append('Roposo')
+    elif row['ad_account_id'] in shiprocket_acc_list_df.values:
+        top_customers_flag.append('Shiprocket')
     else:
         top_customers_flag.append('Others')
 
@@ -643,8 +646,14 @@ if selected == "Key Account Stats" and st.session_state.status == "verified":
     st.dataframe(summary_df, use_container_width=True)
 
 
-    #display full table
+    summary_df = summary_df[sorted(summary_df.columns, key=lambda x: pd.to_datetime(x, format='%b-%y'), reverse=True)]
 
+    st.header(f"Euid Level {grouping} Data")
+    st.dataframe(filtered_df.groupby(['euid'])['spend'].sum(), use_container_width=True)
+
+    #display overall data
+    st.header(f"Overall {grouping} Data")
+    st.dataframe(filtered_df.groupby(['grouped_date'])['spend'].sum(), use_container_width=True)
 
 elif selected == "Overall Stats - Ind" and st.session_state.status == "verified":
 

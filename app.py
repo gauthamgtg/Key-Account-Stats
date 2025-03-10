@@ -1496,9 +1496,23 @@ elif selected == "Disabled Ad Accounts" and st.session_state.status == "verified
     flag = st.selectbox("Select Disabled/Reactived", ("Disabled", "Reactivated"))
 
     disabled_account_df = disabled_account_df.merge(roposo_acc_list_df, left_on='ad_account_id', right_on='Roposo', how='left')
+    disabled_account_df = disabled_account_df.merge(datong_acc_list_df, left_on='ad_account_id', right_on='Datong', how='left')
+    disabled_account_df = disabled_account_df.merge(shiprocket_acc_list_df, left_on='ad_account_id', right_on='Shiprocket', how='left')
+
 
     disabled_account_df['Roposo'] = disabled_account_df['Roposo'].fillna('')
     disabled_account_df['Roposo'] = disabled_account_df['Roposo'].apply(lambda x: 'Roposo' if x != '' else 'Others')
+
+    disabled_account_df['Shiprocket'] = disabled_account_df['Shiprocket'].fillna('')
+    disabled_account_df['Shiprocket'] = disabled_account_df['Shiprocket'].apply(lambda x: 'Shiprocket' if x != '' else 'Others')
+    
+    disabled_account_df['Datong'] = disabled_account_df['Datong'].fillna('')
+    disabled_account_df['Datong'] = disabled_account_df['Datong'].apply(lambda x: 'Datong' if x != '' else 'Others')
+    
+    disabled_account_df['top_customers_flag'] = disabled_account_df.apply(lambda row: row['Roposo'] if row['Roposo'] != 'Others' else (row['Shiprocket'] if row['Shiprocket'] != 'Others' else row['Datong']), axis=1)
+    
+    disabled_account_df = disabled_account_df[['euid','ad_account_id', 'ad_account_name','currency','bm_name','disable_reason', 'disable_date', 'top_customers_flag', 'flag']]
+    
     
     st.title(f"{flag} Ad Accounts")
 

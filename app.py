@@ -460,7 +460,7 @@ with st.sidebar:
     selected = option_menu(
         menu_title="Navigation",  # Required
         options=["Login","Key Account Stats","Overall Stats - Ind","Overall Stats - US","Euid - adaccount mapping","BID - BUID Mapping","Top accounts","FB API Campaign spends","Disabled Ad Accounts","Summary","BM Summary","Stripe lookup","Subscription-Analysis", "Raw Data"],  # Required
-        icons=["lock","airplane-engines","currency-rupee",'currency-dollar','link',"link-45deg","graph-up","suit-spade","slash-circle","book","book-fill","book-filled","credit-card","dice-6-fill", "table"],  # Optional: icons from the Bootstrap library
+        icons=["lock","airplane-engines","currency-rupee",'currency-dollar','link',"link-45deg","graph-up","suit-spade","slash-circle","book","book-fill","bi-stripe","dice-6-fill", "table"],  # Optional: icons from the Bootstrap library
         menu_icon="cast",  # Optional: main menu icon
         default_index=0,  # Default active menu item
     )
@@ -1672,7 +1672,7 @@ elif selected == "Stripe lookup" and st.session_state.status == "verified":
             return None, None
 
     def get_last_100_charges_by_billing_email(email):
-        charges = stripe.Charge.list(limit=100)
+        charges = stripe.Charge.list(limit=1000)
         matched_charges = [c for c in charges.data if c.billing_details and c.billing_details.email == email]
         return matched_charges
 

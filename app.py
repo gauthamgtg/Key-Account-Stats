@@ -459,8 +459,8 @@ df = df[df['dt'] != date.today()]
 with st.sidebar:
     selected = option_menu(
         menu_title="Navigation",  # Required
-        options=["Login","Key Account Stats","Overall Stats - Ind","Overall Stats - US","Euid - adaccount mapping","BID - BUID Mapping","Top accounts","FB API Campaign spends","Disabled Ad Accounts","Summary","BM Summary","Subscription-Analysis", "Raw Data"],  # Required
-        icons=["lock","airplane-engines","currency-rupee",'currency-dollar','link',"link-45deg","graph-up","suit-spade","slash-circle","book","book-fill","book-filled","dice-6-fill", "table"],  # Optional: icons from the Bootstrap library
+        options=["Login","Key Account Stats","Overall Stats - Ind","Overall Stats - US","Euid - adaccount mapping","BID - BUID Mapping","Top accounts","FB API Campaign spends","Disabled Ad Accounts","Summary","BM Summary","Stripe lookup","Subscription-Analysis", "Raw Data"],  # Required
+        icons=["lock","airplane-engines","currency-rupee",'currency-dollar','link',"link-45deg","graph-up","suit-spade","slash-circle","book","book-fill","book-filled","credit-card","dice-6-fill", "table"],  # Optional: icons from the Bootstrap library
         menu_icon="cast",  # Optional: main menu icon
         default_index=0,  # Default active menu item
     )
@@ -1657,87 +1657,122 @@ elif selected == "Disabled Ad Accounts" and st.session_state.status == "verified
 
    
 
+elif selected == "Stripe lookup" and st.session_state.status == "verified":
 
-# elif selected == "Stripe Transaction" and st.session_state.status == "verified":
+    # Set your Stripe API key here
+    stripe.api_key = stripe_key
 
-#     # Set your Stripe API key here
-#     stripe.api_key = stripe_key
+    def get_balance_transaction_fee(balance_transaction_id):
+        try:
+            balance_txn = stripe.BalanceTransaction.retrieve(balance_transaction_id)
+            fee_amount = balance_txn.fee  # in cents
+            currency = balance_txn.currency.upper()
+            return fee_amount, currency
+        except Exception:
+            return None, None
 
-#     def get_balance_transaction_fee(balance_transaction_id):
-#         try:
-#             balance_txn = stripe.BalanceTransaction.retrieve(balance_transaction_id)
-#             fee_amount = balance_txn.fee  # in cents
-#             currency = balance_txn.currency.upper()
-#             return fee_amount, currency
-#         except Exception:
-#             return None, None
+    def get_last_100_charges_by_billing_email(email):
+        charges = stripe.Charge.list(limit=100)
+        matched_charges = [c for c in charges.data if c.billing_details and c.billing_details.email == email]
+        return matched_charges
 
-#     def get_last_100_charges_by_billing_email(email):
+    def get_transaction_by_payment_intent(payment_intent_id):
+        try:
+            charge = stripe.Charge.list(payment_intent=payment_intent_id).data
+            return charge[0] if charge else None
+        except Exception:
+            return None
 
-#         # Fetch the last 100 charges
-#         charges = stripe.Charge.list(limit=100)
-        
-#         # Filter by billing_details.email
-#         matched_charges = [c for c in charges.data if c.billing_details and c.billing_details.email == email]
-#         return matched_charges
+    # Streamlit UI
+    st.title("Stripe Transactions Lookup")
+    
 
-#     # Streamlit UI
-#     st.title("Stripe Payments by Email - Last 100 Charges")
-
-#     # Input email
-#     email = st.text_input("Enter the Email to find charges")
-
-#     if st.button("Find Payments"):
-#         if email:
-#             with st.spinner("Searching the last 100 charges..."):
-#                 transactions = get_last_100_charges_by_billing_email(email)
+    st.header("Search by Email")
+    email = st.text_input("Enter Email to Find Transactions")
+    if st.button("Find Payments"):
+        if email:
+            with st.spinner("Searching the last 100 charges..."):
+                transactions = get_last_100_charges_by_billing_email(email)
                 
-#                 if not transactions:
-#                     st.error(f"No transactions found for Email '{email}' in the last 100 charges.")
-#                 else:
-#                     st.success(f"Found {len(transactions)} transaction(s) for Email '{email}'!")
-                    
-#                     # Prepare data for DataFrame
-#                     data = []
-#                     for transaction in transactions:
-#                         # Retrieve fee if possible
-#                         fee_amount, fee_currency = (None, None)
-#                         if transaction.balance_transaction:
-#                             fee_amount, fee_currency = get_balance_transaction_fee(transaction.balance_transaction)
+                if not transactions:
+                    st.error(f"No transactions found for Email '{email}' in the last 100 charges.")
+                else:
+                    st.success(f"Found {len(transactions)} transaction(s) for Email '{email}'!")
+                    data = []
+                    for transaction in transactions:
+                        fee_amount, fee_currency = (None, None)
+                        if transaction.balance_transaction:
+                            fee_amount, fee_currency = get_balance_transaction_fee(transaction.balance_transaction)
                         
-#                         amount = transaction.amount / 100
-#                         currency = transaction.currency.upper()
-#                         status = transaction.status.capitalize()
-#                         description = transaction.description or "No description"
-#                         date_str = datetime.utcfromtimestamp(transaction.created).strftime('%Y-%m-%d %H:%M:%S UTC')
-#                         payment_intent = transaction.payment_intent
-#                         charge_id = transaction.id
-#                         final_email = transaction.billing_details.email
+                        amount = transaction.amount / 100
+                        currency = transaction.currency.upper()
+                        status = transaction.status.capitalize()
+                        description = transaction.description or "No description"
+                        date_str = datetime.utcfromtimestamp(transaction.created).strftime('%Y-%m-%d %H:%M:%S UTC')
+                        payment_intent = transaction.payment_intent
+                        charge_id = transaction.id
+                        final_email = transaction.billing_details.email
 
-#                         fee_str = f"{(fee_amount / 100):.2f} {fee_currency}" if fee_amount is not None else "N/A"
+                        fee_str = f"{(fee_amount / 100):.2f} {fee_currency}" if fee_amount is not None else "N/A"
                         
-#                         data.append({
-#                             "Charge ID": charge_id,
-#                             "Payment Intent ID": payment_intent,
-#                             "Status": status,
-#                             "Currency": currency,
-#                             "Amount": f"{amount:.2f} {currency}",
-#                             "Stripe Processing Fee": fee_str,
-#                             "Date": date_str,
-#                             "Description": description,
-#                             "Billing Email Used": final_email
-#                         })
+                        data.append({
+                            "Charge ID": charge_id,
+                            "Payment Intent ID": payment_intent,
+                            "Status": status,
+                            "Currency": currency,
+                            "Amount": f"{amount:.2f} {currency}",
+                            "Stripe Processing Fee": fee_str,
+                            "Date": date_str,
+                            "Description": description,
+                            "Billing Email Used": final_email
+                        })
                     
-#                     df = pd.DataFrame(data)
-                    
-#                     # Filter to show only succeeded transactions
-#                     df = df[df['Status'] == 'Succeeded']
+                    df = pd.DataFrame(data)
+                    df = df[df['Status'] == 'Succeeded']
+                    st.write("### Transactions Details")
+                    st.dataframe(df)
+        else:
+            st.warning("Please enter a valid email address.")
 
-#                     # Display the DataFrame as a table
-#                     st.write("### Transactions Details")
-#                     st.dataframe(df)
-#         else:
-#             st.warning("Please enter a valid email address.")
+
+    st.header("Search by Payment Intent ID")
+    payment_intent_id = st.text_input("Enter Payment Intent ID")
+    if st.button("Find Transaction"):
+        if payment_intent_id:
+            with st.spinner("Searching transaction details..."):
+                transaction = get_transaction_by_payment_intent(payment_intent_id)
+                if transaction:
+                    fee_amount, fee_currency = (None, None)
+                    if transaction.balance_transaction:
+                        fee_amount, fee_currency = get_balance_transaction_fee(transaction.balance_transaction)
+                    
+                    amount = transaction.amount / 100
+                    currency = transaction.currency.upper()
+                    status = transaction.status.capitalize()
+                    description = transaction.description or "No description"
+                    date_str = datetime.utcfromtimestamp(transaction.created).strftime('%Y-%m-%d %H:%M:%S UTC')
+                    payment_intent = transaction.payment_intent
+                    charge_id = transaction.id
+                    final_email = transaction.billing_details.email if transaction.billing_details else "N/A"
+
+                    fee_str = f"{(fee_amount / 100):.2f} {fee_currency}" if fee_amount is not None else "N/A"
+
+                    st.write("### Transaction Details")
+                    st.json({
+                        "Charge ID": charge_id,
+                        "Payment Intent ID": payment_intent,
+                        "Status": status,
+                        "Currency": currency,
+                        "Amount": f"{amount:.2f} {currency}",
+                        "Stripe Processing Fee": fee_str,
+                        "Date": date_str,
+                        "Description": description,
+                        "Billing Email Used": final_email
+                    })
+                else:
+                    st.error("No transaction found for the given Payment Intent ID.")
+        else:
+            st.warning("Please enter a valid Payment Intent ID.")
 
 
 elif selected == "Summary" and st.session_state.status == "verified":

@@ -2175,14 +2175,10 @@ if selected == "Overages" and st.session_state.status == "verified":
 
     st.title("Payment Summary")
 
-    st.dataframe(payments_df, use_container_width=True)
-
     payments_df['amount'] = payments_df['amount'].astype(float)
     payments_df['month'] = pd.to_datetime(payments_df['created_at']).dt.to_period('M')
-    st.dataframe(payments_df, use_container_width=True)
 
     payments_summary = payments_df.groupby(['zocket_user_id','month']).agg({'amount':'sum'}).reset_index()
-    st.dataframe(payments_df, use_container_width=True)
 
     payments_summary = payments_summary.pivot(index='zocket_user_id', columns='month', values='amount')
 

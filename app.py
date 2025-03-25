@@ -1004,13 +1004,28 @@ elif selected == "Subscription-Analysis" and st.session_state.status == "verifie
     
 
 elif selected == "Euid - adaccount mapping" and st.session_state.status == "verified":
-
     st.title("Euid - adaccount mapping")
     st.dataframe(list_df, use_container_width=True)
 
-    euid = st.number_input("Type an euid")
+    euid = st.text_input("Type an euid or a list of euids separated by comma").strip()
+    if euid:
+        if ',' in euid:
+            try:
+                euid_list = [int(x.strip()) for x in euid.split(',') if x.strip().isdigit()]
+                filtered_list_df = list_df[list_df['euid'].isin(euid_list)]
+            except ValueError:
+                st.error("Please enter valid integers separated by commas.")
+                filtered_list_df = pd.DataFrame()  # Empty DataFrame
+        else:
+            try:
+                euid_int = int(euid)
+                filtered_list_df = list_df[list_df['euid'] == euid_int]
+            except ValueError:
+                st.error("Please enter a valid integer.")
+                filtered_list_df = pd.DataFrame()  # Empty DataFrame
+    else:
+        filtered_list_df = pd.DataFrame()  # Empty DataFrame
 
-    filtered_list_df = list_df[list_df['euid'] == euid]
     st.dataframe(filtered_list_df, use_container_width=True)
 
     ad_account_id = st.text_input("Type an ad account id")

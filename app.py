@@ -291,6 +291,17 @@ WHERE
     
     '''
 
+overages_query = '''
+SELECT * from zocket_global.wallet_payment_transactions
+where payment_date>='2025-01-01'
+'''
+
+payments_query = '''
+
+SELECT * from zocket_global.partner_payment_transactions
+
+;'''
+
 # datong_api_query='''
 
 # SELECT (euid::float)euid,ad_account_name,aas.ad_account_id,currency_code,aas.dt,spend,total_spend
@@ -358,8 +369,9 @@ list_df = execute_query(query=list_query)
 ai_campaign_spends_df = execute_query(query=zocket_ai_campaigns_spends_query)
 disabled_account_df = execute_query(query=disabled_account_query)
 bid_buid_df = execute_query(query=bp_buid_query)
-# datong_api_df = execute_query(query=datong_api_query) 
-
+# datong_api_df = execute_query(query=datong_api_query)
+overages_df = execute_query(query=overages_query) 
+payments_df = execute_query(query=payments_query)
 
 # Load the CSV file
 
@@ -459,8 +471,8 @@ df = df[df['dt'] != date.today()]
 with st.sidebar:
     selected = option_menu(
         menu_title="Navigation",  # Required
-        options=["Login","Key Account Stats","Overall Stats - Ind","Overall Stats - US","Euid - adaccount mapping","BID - BUID Mapping","Top accounts","FB API Campaign spends","Disabled Ad Accounts","Summary","BM Summary","Stripe lookup","Subscription-Analysis", "Raw Data"],  # Required
-        icons=["lock","airplane-engines","currency-rupee",'currency-dollar','link',"link-45deg","graph-up","suit-spade","slash-circle","book","book-fill","bi-stripe","dice-6-fill", "table"],  # Optional: icons from the Bootstrap library
+        options=["Login","Key Account Stats","Overall Stats - Ind","Overall Stats - US","Euid - adaccount mapping","BID - BUID Mapping","Top accounts","FB API Campaign spends","Disabled Ad Accounts","Summary","BM Summary","Stripe lookup","Subscription-Analysis", "Raw Data","Overages"],  # Required
+        icons=["lock","airplane-engines","currency-rupee",'currency-dollar','link',"link-45deg","graph-up","suit-spade","slash-circle","book","book-fill","bi-stripe","dice-6-fill", "table","bi-coin"],  # Optional: icons from the Bootstrap library
         menu_icon="cast",  # Optional: main menu icon
         default_index=0,  # Default active menu item
     )
@@ -2130,3 +2142,48 @@ elif selected == "Raw Data" and st.session_state.status == "verified":
     st.write("FBI API spends raw dump")
     st.dataframe(ai_campaign_spends_df, use_container_width=True)
 
+
+if selected == "Overages" and st.session_state.status == "verified":
+
+    st.title("Payments")
+
+    st.dataframe(payments_df, use_container_width=True)
+
+    st.title("Overages Page")
+    st.dataframe(overages_df, use_container_width=True)
+
+    buid = st.number_input("Enter BUID", min_value=0, step=1, key='buid')
+
+    st.write(f"Payments for BUID: {buid}")
+
+    st.dataframe(payments_df[payments_df['zocket_user_id']==buid], use_container_width=True)
+
+    st.write(f"Overages for BUID: {buid}")
+
+    st.dataframe(overages_df[overages_df['user_id']==buid], use_container_width=True)
+
+    st.title("Overages Summary")
+
+    overages_df['overage_fee'] = overages_df['overage_fee'].astype(float)
+    overages_df['month'] = pd.to_datetime(overages_df['payment_date']).dt.to_period('M')
+
+    overages_summary = overages_df.groupby(['user_id','month']).agg({'overage_fee':'sum'}).reset_index()
+
+    overages_summary = overages_summary.pivot(index='user_id', columns='month', values='overage_fee')
+
+    st.dataframe(overages_summary, use_container_width=True)
+
+    st.title("Payment Summary")
+
+    st.dataframe(payments_df, use_container_width=True)
+
+    payments_df['amount'] = payments_df['amount'].astype(float)
+    payments_df['month'] = pd.to_datetime(payments_df['created_at']).dt.to_period('M')
+    st.dataframe(payments_df, use_container_width=True)
+
+    payments_summary = payments_df.groupby(['zocket_user_id','month']).agg({'amount':'sum'}).reset_index()
+    st.dataframe(payments_df, use_container_width=True)
+
+    payments_summary = payments_summary.pivot(index='zocket_user_id', columns='month', values='amount')
+
+    st.dataframe(payments_summary, use_container_width=True)

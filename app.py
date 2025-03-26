@@ -1136,7 +1136,7 @@ elif selected == "Top accounts" and st.session_state.status == "verified":
         end_date = st.date_input("End Date", value=datetime.now())
 
     # Filter DataFrame by selected date range
-    filtered_df = filtered_df[(filtered_df['dt'].dt.date >= start_date) & (filtered_df['dt'].dt.date <= end_date)]
+    filtered_df = filtered_df[(filtered_df['dt'] >= start_date.date()) & (filtered_df['dt'] <= end_date.date())]
 
     # Aggregate spend per business and get the top 10
     top_spenders = (
@@ -1152,11 +1152,19 @@ elif selected == "Top accounts" and st.session_state.status == "verified":
     top_businesses = pd.merge(top_spenders, filtered_df, on="ad_account_id", how="left") \
                    .drop_duplicates(subset="ad_account_id") \
                    .sort_values(by="spend_in_usd", ascending=False).reset_index(drop=True)
+    
+    top_businesses = pd.merge(top_businesses, disabled_account_df[["ad_account_id", "flag"]], on="ad_account_id", how="left") \
+                   .drop_duplicates(subset="ad_account_id") \
+                   .sort_values(by="spend_in_usd", ascending=False).reset_index(drop=True)
+    
+    top_businesses['flag'] = top_businesses['flag'].fillna("Active")
 
-    top_businesses = top_businesses[['euid', 'ad_account_id', 'ad_account_name','business_manager_name', 'spend_in_usd']]
+    # st.dataframe(top_businesses, use_container_width=True)
+
+    top_businesses = top_businesses[['euid', 'ad_account_id', 'ad_account_name','business_manager_name', 'spend_in_usd','flag']]
 
     # Display top 10 businesses
-    st.header("Top 10 Businesses by Spend")
+    st.header(f"Top {n} {currency_option} Businesses by Spend")
     st.write(f"Showing data from {start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')}")
 
     top_businesses.index += 1

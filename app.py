@@ -96,7 +96,7 @@ with spends AS
         from payment_trans_details td
         group by 1)
 
-select coalesce(c.app_business_id,cast(bp.buid as int)) as euid,coalesce(eu.business_name,bp.name) as business_name,coalesce(eu.company_name,bp.brand_name) as company_name,dt,coalesce(b.name,d.name) as ad_account_name,
+select coalesce(cast(bp.buid as int),c.app_business_id) as euid,coalesce(eu.business_name,bp.name) as business_name,coalesce(eu.company_name,bp.brand_name) as company_name,dt,coalesce(b.name,d.name) as ad_account_name,
 coalesce(c.name,e.name) as business_manager_name,
 case when a.ad_account_id ='act_1090921776002942' then 'INR' else COALESCE(b.currency,d.currency) end as currency_code,a.ad_account_id,spend
 from 
@@ -292,7 +292,21 @@ WHERE
     '''
 
 overages_query = '''
-SELECT * from zocket_global.wallet_payment_transactions
+SELECT case when b.business_user_id is null then 'Normal' else 'PM Model' end as Flag,a.* from zocket_global.wallet_payment_transactions a
+left join
+(SELECT DISTINCT
+business_user_id
+		FROM 
+			zocket_global.subscription_products sp
+		INNER JOIN 
+			zocket_global.subscription_products_pricing spp ON sp.id = spp.product_id
+		INNER JOIN 
+			zocket_global.subscription_plan spn ON sp.id = spn.product_id
+		INNER JOIN 
+			zocket_global.user_subscriptions us ON spn.id = us.plan_id
+WHERE sp.adspend_limit=0
+)b
+on a.user_id = b.business_user_id
 where payment_date>='2025-01-01'
 '''
 
@@ -300,6 +314,155 @@ payments_query = '''
 
 SELECT * from zocket_global.partner_payment_transactions
 
+;'''
+
+us_finance_all_transactions_query = '''
+
+SELECT payment_transcation_id, cast(business_user_id as VARCHAR)buid,cast(business_id as VARCHAR)bid,'zocketai sub' as flag,'usd' as currency,start_date,end_date,amount,0 as gateway_charge,0 as processing_fee,0 as tax,0 as convenience_fee 
+from
+(
+select us.id,	business_id,	business_user_id,	us.plan_id	,amount	,start_date	,end_date	,is_free_trial	,subscription_id	,subscription_schedule_id	,subscription_status	,cancelled_at	,cancel_at,	status	,source	,payment_transaction_id	,invoice_id	,renewed_at	,renewed_subscription_id	,downgraded_at	,downgraded_to_plan_id	,upgraded_at	,upgraded_to_plan_id	,deleted_at	,us.created_at	,us.updated_at	,free_trial_days	,initial_start_date	,user_enabled_custom_plan_id	,is_unlimited	, pt.payment_transcation_id
+from zocket_global.user_subscriptions us 
+inner join zocket_global.payment_transactions pt on us.payment_transaction_id = pt.id
+where us.source = 'STRIPE' 
+)
+
+union all
+
+SELECT payment_id,cast(euid as VARCHAR)euid,cast(ad_account_id as varchar)adacc,'enterprise sub' as flag,'usd' as currency,start_date,end_date,usd_amount as amount,0 as gateway_charge,0 as processing_fee,0 as tax,0 as convenience_fee 
+from
+(
+SELECT payment_id,euid,ad_account_id,transfer_ad_account_id,transfer_euid,transfer_amount,invoice_id,tranferred_at,
+'enterprise' as flag,sp.amount as sp_amount,usd.amount as usd_amount,usd.created_at as start_date,expiry_date as end_date, sp.usd_price_range
+ from user_subscription_data usd
+left join subscription_plan sp on usd.plan_id = sp.plan_id
+where payment_id like '%pi%' or payment_id like '%cs_live%'
+)
+union all
+
+
+SELECT receiver_id,buid::varchar,business_id::varchar,'adspends' as flag,currency,'01/01/2001' as start_date,'01/01/2001' as end_date,adspend_amount, gateway_charge,processing_fee,tax,convenience_fee
+ from
+(
+SELECT euid as buid,euid as business_id,ad_account,date(payment_date)as dt, total_amount,receiver_id,currency,
+gateway_charge,adspend_amount,processing_fee,tax,convenience_fee,'enterprise' as flag
+from payment_trans_details
+where lower(currency)!='inr'
+
+union all
+
+SELECT user_id as buid,business_id,ad_account_id,date(created_at)as dt, total_amount,payment_id as receiver_id,currency,
+gateway_processing_fee as gateway_charge,final_adspend_amount as adspend_amount,overage_fee as processing_fee,tax,
+0 as convenience_fee,'zocket.ai' as flag
+FROM
+(
+SELECT 
+                        poa.id, 
+                        poa.total_amount, 
+                        poa.tax,
+                        poa.overage_fee,
+                        DATE(DATEADD(minute, 330, poa.created_at)) AS created_at, 
+                        pt.gateway_processing_fee, 
+                        poa.ad_account_id, 
+                        poa.business_id,
+                        poa.user_id,
+                        poa.final_adspend_amount, 
+                        pt.currency,
+                        poa.api_status,
+                        DATE(DATEADD(minute, 330, pt.payment_date)) AS payment_date,
+                        bu.email,
+                        bu.name,
+                        faa.name,
+                        pt.payment_id
+                FROM zocket_global.wallet_payment_order_adspend poa
+                INNER JOIN zocket_global.wallet_payment_transactions pt ON poa.Payment_transaction_id = pt.id
+                JOIN zocket_global.business_users bu on bu.id = poa.user_id
+                JOIN zocket_global.fb_ad_accounts faa on faa.ad_account_id = concat('act_', poa.ad_account_id)
+                WHERE poa.status = '1'
+                ORDER BY poa.id DESC 
+)
+union all
+select zocket_user_id as buid,0 as bid,'master wallet' as ad_account_id,date(created_at)as dt, amount,payment_id as receiver_id,currency,
+gateway_processing_fee as gateway_charge,amount - gateway_processing_fee as adspend_amount,0 as processing_fee,tax,
+0 as convenience_fee,'zocket.ai wallet' as flag
+from zocket_global.partner_payment_transactions
+)
+;'''
+
+finance_all_trxn_query = '''
+SELECT payment_transcation_id, cast(business_user_id as VARCHAR)buid,cast(business_id as VARCHAR)bid,'zocketai sub' as flag,'usd' as currency,start_date,end_date,amount,0 as gateway_charge,0 as processing_fee,0 as tax,0 as convenience_fee, bu.name, bu.mobile, bu.email, bu.city, bu.state,bu.country, 'zocket.ai' as gst_number
+from
+(
+select us.id,	business_id,	business_user_id,	us.plan_id	,amount	,start_date	,end_date	,is_free_trial	,subscription_id	,subscription_schedule_id	,subscription_status	,cancelled_at	,cancel_at,	status	,source	,payment_transaction_id	,invoice_id	,renewed_at	,renewed_subscription_id	,downgraded_at	,downgraded_to_plan_id	,upgraded_at	,upgraded_to_plan_id	,deleted_at	,us.created_at	,us.updated_at	,free_trial_days	,initial_start_date	,user_enabled_custom_plan_id	,is_unlimited	, pt.payment_transcation_id
+from zocket_global.user_subscriptions us 
+inner join zocket_global.payment_transactions pt on us.payment_transaction_id = pt.id
+where us.source = 'STRIPE' 
+) a
+left join zocket_global.business_users bu on a.business_user_id = bu.id
+
+union all
+
+SELECT payment_id,cast(a.euid as VARCHAR)euid,cast(ad_account_id as varchar)adacc,'enterprise sub' as flag,'usd' as currency,start_date,end_date,usd_amount as amount,0 as gateway_charge,0 as processing_fee,0 as tax,0 as convenience_fee ,bu.business_name, bu.mobile, bu.email, bu.city, bu.state,bu.country_code,gst_number as gst_number
+from
+(
+SELECT payment_id,euid,ad_account_id,transfer_ad_account_id,transfer_euid,transfer_amount,invoice_id,tranferred_at,
+'enterprise' as flag,sp.amount as sp_amount,usd.amount as usd_amount,usd.created_at as start_date,expiry_date as end_date, sp.usd_price_range
+ from user_subscription_data usd
+left join subscription_plan sp on usd.plan_id = sp.plan_id
+) a
+left join enterprise_users bu on a.euid = bu.euid
+union all
+
+
+SELECT receiver_id,buid::varchar,business_id::varchar,'adspends' as flag,currency,'01/01/2001' as start_date,'01/01/2001' as end_date,adspend_amount, gateway_charge,processing_fee,tax,convenience_fee,business_name, mobile, email, city, state, country_code,gst_number as gst_number
+ from
+(
+SELECT a.euid as buid,a.euid as business_id,ad_account,date(payment_date)as dt, total_amount,receiver_id,currency,
+gateway_charge,adspend_amount,processing_fee,tax,convenience_fee,'enterprise' as flag,bu.business_name, bu.mobile, bu.email, bu.city, bu.state,bu.country_code,gst_number as gst_number
+from payment_trans_details a
+left join enterprise_users bu on a.euid = bu.euid 
+
+union all
+
+SELECT user_id as buid,business_id,ad_account_id,date(a.created_at)as dt, total_amount,payment_id as receiver_id,currency,
+gateway_processing_fee as gateway_charge,final_adspend_amount as adspend_amount,overage_fee as processing_fee,tax,
+0 as convenience_fee,'zocket.ai' as flag, bu.name, bu.mobile, bu.email, bu.city, bu.state,bu.country, 'zocket.ai' as gst_number
+FROM
+(
+SELECT 
+                        poa.id, 
+                        poa.total_amount, 
+                        poa.tax,
+                        poa.overage_fee,
+                        DATE(DATEADD(minute, 330, poa.created_at)) AS created_at, 
+                        pt.gateway_processing_fee, 
+                        poa.ad_account_id, 
+                        poa.business_id,
+                        poa.user_id,
+                        poa.final_adspend_amount, 
+                        pt.currency,
+                        poa.api_status,
+                        DATE(DATEADD(minute, 330, pt.payment_date)) AS payment_date,
+                        bu.email,
+                        bu.name,
+                        faa.name,
+                        pt.payment_id
+                FROM zocket_global.wallet_payment_order_adspend poa
+                INNER JOIN zocket_global.wallet_payment_transactions pt ON poa.Payment_transaction_id = pt.id
+                JOIN zocket_global.business_users bu on bu.id = poa.user_id
+                JOIN zocket_global.fb_ad_accounts faa on faa.ad_account_id = concat('act_', poa.ad_account_id)
+                WHERE poa.status = '1'
+                ORDER BY poa.id DESC 
+)a
+left join zocket_global.business_users bu on a.user_id = bu.id
+
+union all
+select zocket_user_id as buid,0 as bid,'master wallet' as ad_account_id,date(a.created_at)as dt, amount,payment_id as receiver_id,currency,
+gateway_processing_fee as gateway_charge,amount - gateway_processing_fee as adspend_amount,0 as processing_fee,tax,
+0 as convenience_fee,'zocket.ai wallet' as flag,bu.name, bu.mobile, bu.email, bu.city, bu.state,bu.country, 'zocket.ai' as gst_number
+from zocket_global.partner_payment_transactions a
+left join zocket_global.business_users bu on a.zocket_user_id = bu.id
+)
 ;'''
 
 # datong_api_query='''
@@ -471,8 +634,8 @@ df = df[df['dt'] != date.today()]
 with st.sidebar:
     selected = option_menu(
         menu_title="Navigation",  # Required
-        options=["Login","Key Account Stats","Overall Stats - Ind","Overall Stats - US","Euid - adaccount mapping","BID - BUID Mapping","Top accounts","FB API Campaign spends","Disabled Ad Accounts","Summary","BM Summary","Stripe lookup","Subscription-Analysis", "Raw Data","Overages"],  # Required
-        icons=["lock","airplane-engines","currency-rupee",'currency-dollar','link',"link-45deg","graph-up","suit-spade","slash-circle","book","book-fill","bi-stripe","dice-6-fill", "table","bi-coin"],  # Optional: icons from the Bootstrap library
+        options=["Login","Key Account Stats","Overall Stats - Ind","Overall Stats - US","Euid - adaccount mapping","BID - BUID Mapping","Top accounts","FB API Campaign spends","Disabled Ad Accounts","Summary","BM Summary","Stripe lookup","Ad360 Subscription-Analysis", "Raw Data","Overages","US Finance Mappings","Overall Finance Mappings"],  # Required
+        icons=["lock","airplane-engines","currency-rupee",'currency-dollar','link',"link-45deg","graph-up","suit-spade","slash-circle","book","book-fill","bi-stripe","dice-6-fill", "table","bi-coin","bi-safe2-fill","bi-piggy-bank"],  # Optional: icons from the Bootstrap library
         menu_icon="cast",  # Optional: main menu icon
         default_index=0,  # Default active menu item
     )
@@ -904,7 +1067,12 @@ elif selected == "Overall Stats - US" and st.session_state.status == "verified":
     st.dataframe(us_df[us_df['dt']==yesterday].sort_values(by='spend_in_usd', ascending=False).reset_index(drop=True), use_container_width=True)
     
     st.write("Current Month spend data:")
-    us_grouped_data_adacclevel = us_current_month_df.groupby([pd.to_datetime(us_current_month_df['dt']).dt.strftime('%b %y'), 'euid', 'ad_account_id', 'ad_account_name', 'currency_code'])[[ 'spend','spend_in_usd']].sum().sort_values(by='spend_in_usd', ascending=False).reset_index()
+    us_grouped_data_adacclevel = us_current_month_df.groupby(
+        [pd.to_datetime(us_current_month_df['dt']).dt.strftime('%b %y'), 'euid', 'ad_account_id', 'ad_account_name', 'currency_code']
+    )[['spend', 'spend_in_usd']].agg(
+        total_spend_in_usd=('spend_in_usd', 'sum'),
+        avg_spend_last_30_days=('spend_in_usd', lambda x: x[-30:].mean())
+    ).sort_values(by='total_spend_in_usd', ascending=False).reset_index()
     us_grouped_data_adacclevel.index += 1
     st.dataframe(us_grouped_data_adacclevel, use_container_width=True)
 
@@ -944,9 +1112,9 @@ elif selected == "Overall Stats - US" and st.session_state.status == "verified":
 
 
 
-elif selected == "Subscription-Analysis" and st.session_state.status == "verified":
+elif selected == "Ad360 Subscription-Analysis" and st.session_state.status == "verified":
     # Streamlit App
-    st.title("Ad Subscription Dashboard")
+    st.title("Ad360 Subscription Dashboard")
 
     # Currency Filter
     currency_option = st.selectbox("Select Currency", ["India", "US"])
@@ -1108,7 +1276,7 @@ elif selected == "Top accounts" and st.session_state.status == "verified":
 
 
     # Date Range Selection
-    time_frame = st.selectbox("Select Time Frame", ["Last 30 Days", "Last 90 Days", "Overall", "Custom Date Range"])
+    time_frame = st.selectbox("Select Time Frame", ["Last 30 Days","Last 60 Days", "Last 90 Days", "Overall", "Custom Date Range"])
 
     # Currency Filter
     currency_option = st.selectbox("Select BM", ["All", "INR", "USD"])
@@ -1124,6 +1292,9 @@ elif selected == "Top accounts" and st.session_state.status == "verified":
 
     if time_frame == "Last 30 Days":
         start_date = datetime.now() - timedelta(days=30)
+        end_date = datetime.now()
+    elif time_frame == "Last 60 Days":
+        start_date = datetime.now() - timedelta(days=60)
         end_date = datetime.now()
     elif time_frame == "Last 90 Days":
         start_date = datetime.now() - timedelta(days=90)
@@ -2153,11 +2324,11 @@ elif selected == "Raw Data" and st.session_state.status == "verified":
 
 if selected == "Overages" and st.session_state.status == "verified":
 
-    st.title("Payments")
+    st.title("Payments dump")
 
     st.dataframe(payments_df, use_container_width=True)
 
-    st.title("Overages Page")
+    st.title("Overages dump")
     st.dataframe(overages_df, use_container_width=True)
 
     buid = st.number_input("Enter BUID", min_value=0, step=1, key='buid')
@@ -2175,9 +2346,9 @@ if selected == "Overages" and st.session_state.status == "verified":
     overages_df['overage_fee'] = overages_df['overage_fee'].astype(float)
     overages_df['month'] = pd.to_datetime(overages_df['payment_date']).dt.to_period('M')
 
-    overages_summary = overages_df.groupby(['user_id','month']).agg({'overage_fee':'sum'}).reset_index()
+    overages_summary = overages_df.groupby(['user_id','flag','month']).agg({'overage_fee':'sum'}).reset_index()
 
-    overages_summary = overages_summary.pivot(index='user_id', columns='month', values='overage_fee')
+    overages_summary = overages_summary.pivot(index=['user_id','flag'], columns='month', values='overage_fee')
 
     st.dataframe(overages_summary, use_container_width=True)
 
@@ -2191,3 +2362,44 @@ if selected == "Overages" and st.session_state.status == "verified":
     payments_summary = payments_summary.pivot(index='zocket_user_id', columns='month', values='amount')
 
     st.dataframe(payments_summary, use_container_width=True)
+
+elif selected == "US Finance Mappings" and st.session_state.status == "verified":
+
+    finance_trxns_df = execute_query(query=us_finance_all_transactions_query)
+
+    st.title("Finance Mappings")
+
+    st.write("Finance Transactions dump")
+    st.dataframe(finance_trxns_df, use_container_width=True)
+
+    st.write("Finance Mappings")
+
+
+    invoice_ids = st.text_input("Enter Invoice IDs", key='invoice_ids')
+
+    if invoice_ids:
+        invoice_ids_list = [x.strip() for x in invoice_ids.split(',') if x.strip()]
+        finance_trxns_df = finance_trxns_df[finance_trxns_df['payment_transcation_id'].isin(invoice_ids_list)]
+        st.dataframe(finance_trxns_df, use_container_width=True)
+
+
+
+elif selected == "Overall Finance Mappings" and st.session_state.status == "verified":
+
+    finance_trxns_df = execute_query(query=finance_all_trxn_query)
+
+    st.title("Finance Mappings")
+
+    st.write("Finance Transactions dump")
+    st.dataframe(finance_trxns_df, use_container_width=True)
+
+    st.write("Finance Mappings")
+
+
+    invoice_ids = st.text_input("Enter Invoice IDs", key='invoice_ids')
+
+    if invoice_ids:
+        invoice_ids_list = [x.strip() for x in invoice_ids.split(',') if x.strip()]
+        finance_trxns_df = finance_trxns_df[finance_trxns_df['payment_transcation_id'].isin(invoice_ids_list)]
+        st.dataframe(finance_trxns_df, use_container_width=True)
+

@@ -2346,9 +2346,9 @@ if selected == "Overages" and st.session_state.status == "verified":
     overages_df['overage_fee'] = overages_df['overage_fee'].astype(float)
     overages_df['month'] = pd.to_datetime(overages_df['payment_date']).dt.to_period('M')
 
-    overages_summary = overages_df.groupby(['user_id','flag','month']).agg({'overage_fee':'sum'}).reset_index()
+    overages_summary = overages_df.groupby(['user_id','flag','month','currency']).agg({'overage_fee':'sum'}).reset_index()
 
-    overages_summary = overages_summary.pivot(index=['user_id','flag'], columns='month', values='overage_fee')
+    overages_summary = overages_summary.pivot(index=['user_id','flag','currency'], columns='month', values='overage_fee')
 
     st.dataframe(overages_summary, use_container_width=True)
 
@@ -2402,4 +2402,3 @@ elif selected == "Overall Finance Mappings" and st.session_state.status == "veri
         invoice_ids_list = [x.strip() for x in invoice_ids.split(',') if x.strip()]
         finance_trxns_df = finance_trxns_df[finance_trxns_df['payment_transcation_id'].isin(invoice_ids_list)]
         st.dataframe(finance_trxns_df, use_container_width=True)
-

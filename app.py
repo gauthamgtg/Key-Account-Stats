@@ -390,7 +390,7 @@ from zocket_global.partner_payment_transactions
 ;'''
 
 finance_all_trxn_query = '''
-SELECT payment_transcation_id, cast(business_user_id as VARCHAR)buid,cast(business_id as VARCHAR)bid,'zocketai sub' as flag,'usd' as currency,start_date,end_date,amount,0 as gateway_charge,0 as processing_fee,0 as tax,0 as convenience_fee, bu.name, bu.mobile, bu.email, bu.city, bu.state,bu.country, 'zocket.ai' as gst_number
+SELECT payment_transcation_id, cast(business_user_id as VARCHAR)buid,cast(business_id as VARCHAR)bid,'zocketai sub' as flag,'usd' as currency,start_date,end_date,amount,0 as gateway_charge,0 as processing_fee,0 as tax,0 as convenience_fee, bu.name, bu.mobile, bu.email, bu.city, bu.state,bu.country, gst_number as gst_number
 from
 (
 select us.id,	business_id,	business_user_id,	us.plan_id	,amount	,start_date	,end_date	,is_free_trial	,subscription_id	,subscription_schedule_id	,subscription_status	,cancelled_at	,cancel_at,	status	,source	,payment_transaction_id	,invoice_id	,renewed_at	,renewed_subscription_id	,downgraded_at	,downgraded_to_plan_id	,upgraded_at	,upgraded_to_plan_id	,deleted_at	,us.created_at	,us.updated_at	,free_trial_days	,initial_start_date	,user_enabled_custom_plan_id	,is_unlimited	, pt.payment_transcation_id
@@ -426,7 +426,7 @@ union all
 
 SELECT user_id as buid,business_id,ad_account_id,date(a.created_at)as dt, total_amount,payment_id as receiver_id,currency,
 gateway_processing_fee as gateway_charge,final_adspend_amount as adspend_amount,overage_fee as processing_fee,tax,
-0 as convenience_fee,'zocket.ai' as flag, bu.name, bu.mobile, bu.email, bu.city, bu.state,bu.country, 'zocket.ai' as gst_number
+0 as convenience_fee,'zocket.ai' as flag, bu.name, bu.mobile, bu.email, bu.city, bu.state,bu.country, gst_number as gst_number
 FROM
 (
 SELECT 
@@ -459,7 +459,7 @@ left join zocket_global.business_users bu on a.user_id = bu.id
 union all
 select zocket_user_id as buid,0 as bid,'master wallet' as ad_account_id,date(a.created_at)as dt, amount,payment_id as receiver_id,currency,
 gateway_processing_fee as gateway_charge,amount - gateway_processing_fee as adspend_amount,0 as processing_fee,tax,
-0 as convenience_fee,'zocket.ai wallet' as flag,bu.name, bu.mobile, bu.email, bu.city, bu.state,bu.country, 'zocket.ai' as gst_number
+0 as convenience_fee,'zocket.ai wallet' as flag,bu.name, bu.mobile, bu.email, bu.city, bu.state,bu.country, gst_number as gst_number
 from zocket_global.partner_payment_transactions a
 left join zocket_global.business_users bu on a.zocket_user_id = bu.id
 )
@@ -1207,10 +1207,13 @@ elif selected == "Euid - adaccount mapping" and st.session_state.status == "veri
         filtered_list_df = pd.DataFrame()  # Empty DataFrame
 
     st.dataframe(filtered_list_df, use_container_width=True)
+    ad_account_ids = st.text_input("Type ad account ids (comma separated)").strip()
 
-    ad_account_id = st.text_input("Type an ad account id")
-
-    filtered_list_df = list_df[list_df['ad_account_id'] == ad_account_id]
+    if ad_account_ids:
+        ad_account_ids_list = [x.strip() for x in ad_account_ids.split(',') if x.strip()]
+        filtered_list_df = list_df[list_df['ad_account_id'].isin(ad_account_ids_list)]
+    else:
+        filtered_list_df = pd.DataFrame()  # Empty DataFrame if no input
     st.dataframe(filtered_list_df, use_container_width=True)
 
 elif selected == "Top accounts" and st.session_state.status == "verified":

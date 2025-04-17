@@ -1626,7 +1626,7 @@ elif selected == "FB API Campaign spends" and st.session_state.status == "verifi
         pivot_df = pivot_df[sorted(pivot_df.columns, key=lambda x: pd.to_datetime(x), reverse=True)]
 
     # st.dataframe(grouped_df, use_container_width=True)
-    st.dataframe(pivot_df, use_container_width=True) 
+    st.dataframe(pivot_df.style.format("{:.2f}"), use_container_width=True)
 
     st.header("Campaign Level Data")
 

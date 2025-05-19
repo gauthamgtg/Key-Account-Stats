@@ -206,17 +206,27 @@ WHERE
 
 #adlevel query
 zocket_ai_campaigns_spends_query='''
-select
-ggci.ad_account_id,ggci.currency,date(date_start) as dt,account_name,gc.campaign_id as campaign_id,c.name as campaign_name,SUM(ggci.spend)spend
+select ggci.ad_account_id,ggci.currency,date(date_start) as dt,account_name,gc.campaign_id as campaign_id,c.name as campaign_name,
+case when date(bu.created_at) >= current_date - 30 then 'Onboarded <30d ago' else 'Onboarded >30d ago' end as User_flag,buid,
+SUM(ggci.spend)spend
 FROM
     zocket_global.campaigns c
+    join 
+    (SELECT
+    id ,name,brand_name,json_extract_path_text(json_extract_array_element_text(business_user_ids, 0), 'role') AS role,
+    json_extract_path_text(json_extract_array_element_text(business_user_ids, 0), 'business_user_id') AS buid
+FROM
+    zocket_global.business_profile
+WHERE
+    json_extract_path_text(json_extract_array_element_text(business_user_ids, 0), 'role') = 'owner' )bp on c.business_id=bp.id
+    join zocket_global.business_users bu on bp.buid = bu.id
     join zocket_global.fb_campaigns gc on gc.app_campaign_id = c.id 
     join zocket_global.fb_adsets fbadset on gc.id = fbadset.campaign_id
     join zocket_global.fb_ads fbads on fbadset.id = fbads.adset_id
     join zocket_global.fb_ads_age_gender_metrics_v3 ggci on ggci.ad_id = fbads.ad_id
 where date(date_start)>='2024-01-01' and date(date_start)<current_date
 and c.imported_at is null
-group by 1,2,3,4,5,6
+group by 1,2,3,4,5,6,7,8
 '''
 
 #disabled account query
@@ -417,7 +427,7 @@ union all
 SELECT receiver_id,buid::varchar,business_id::varchar,'adspends' as flag,currency,'01/01/2001' as start_date,'01/01/2001' as end_date,adspend_amount, gateway_charge,processing_fee,tax,convenience_fee,business_name, mobile, email, city, state, country_code,gst_number as gst_number
  from
 (
-SELECT a.euid as buid,a.euid as business_id,ad_account,date(payment_date)as dt, total_amount,receiver_id,currency,
+SELECT a.euid as buid,a.ad_account as business_id,ad_account,date(payment_date)as dt, total_amount,receiver_id,currency,
 gateway_charge,adspend_amount,processing_fee,tax,convenience_fee,'enterprise' as flag,bu.business_name, bu.mobile, bu.email, bu.city, bu.state,bu.country_code,gst_number as gst_number
 from payment_trans_details a
 left join enterprise_users bu on a.euid = bu.euid 
@@ -1421,6 +1431,7 @@ elif selected == "FB API Campaign spends" and st.session_state.status == "verifi
     st.text("Excludes today's Data.")
 
     ai_campaign_spends_df['spend'] = pd.to_numeric(ai_campaign_spends_df['spend'], errors='coerce')
+    ai_campaign_spends_df['buid'] = pd.to_numeric(ai_campaign_spends_df['buid'], errors='coerce')
 
     ai_campaign_spends_df = ai_campaign_spends_df[pd.to_datetime(ai_campaign_spends_df['dt']).dt.date != datetime.now().date()]
 
@@ -1433,7 +1444,9 @@ elif selected == "FB API Campaign spends" and st.session_state.status == "verifi
         currency_option = st.selectbox("Select BM", ["All", "IND BM", "US BM"], index=0)
 
         start_date = st.date_input("Start Date", value=datetime(2024, 9, 1))
-    
+
+        onboarding_flag = st.selectbox("Onboarding Flag", ["All", "Onboarded >30d ago", "Onboarded <30d ago"], index=0)
+        
     if currency_option == "IND BM":
         ai_campaign_spends_df = ai_campaign_spends_df[ai_campaign_spends_df['currency'] == "INR"]
     if currency_option == "US BM":
@@ -1446,6 +1459,8 @@ elif selected == "FB API Campaign spends" and st.session_state.status == "verifi
         grouping = st.selectbox('Choose Grouping', ['Year', 'Month', 'Week', 'Date'], index=1)
 
         end_date = st.date_input("End Date", value=ai_campaign_spends_df['dt'].max())
+
+        buid = st.number_input("Enter buid", min_value=0, value=0, step=1)
 
     non_usd_currencies = ai_campaign_spends_df['currency'].unique()
     non_usd_currencies = [currency for currency in non_usd_currencies if currency != 'USD']
@@ -1522,6 +1537,16 @@ elif selected == "FB API Campaign spends" and st.session_state.status == "verifi
         ai_campaign_spends_df.loc[:, 'grouped_date'] = ai_campaign_spends_df['dt'].apply(lambda x: f"{x.strftime('%Y')} - week {x.isocalendar()[1]}")  # Week format as 2024 - week 24
     else:
         ai_campaign_spends_df.loc[:, 'grouped_date'] = ai_campaign_spends_df['dt']  # Just use the date as is (in date format)
+
+    if onboarding_flag == "Onboarded <30d ago":
+        ai_campaign_spends_df = ai_campaign_spends_df[ai_campaign_spends_df['user_flag'] == 'Onboarded <30d ago']
+    elif onboarding_flag == "Onboarded >30d ago":
+        ai_campaign_spends_df = ai_campaign_spends_df[ai_campaign_spends_df['user_flag'] == 'Onboarded >30d ago']
+    else:
+        ai_campaign_spends_df = ai_campaign_spends_df
+    
+    if buid != 0:
+        ai_campaign_spends_df = ai_campaign_spends_df[ai_campaign_spends_df['buid'] == buid]
 
     # Metrics Calculation
     # Today's Spend
@@ -2300,11 +2325,22 @@ elif selected == "Raw Data" and st.session_state.status == "verified":
     st.write("roposo acc list dump")
     st.dataframe(roposo_acc_list_df, use_container_width=True)
 
-    st.write("Ad spends raw dump")
-    st.dataframe(df, use_container_width=True)
+    df['dt'] = pd.to_datetime(df['dt'])
 
-    # st.write("Subscriptions raw dump")
-    # st.dataframe(sub_df, use_container_width=True)
+    st.write("Ad spends raw dump")
+
+    # Use .date() to make default values compatible with st.date_input()
+    start_date = st.date_input("Start Date", value=df['dt'].min().date())
+    end_date = st.date_input("End Date", value=df['dt'].max().date())
+
+    # Convert selected dates to datetime for filtering
+    start_datetime = pd.Timestamp(start_date)
+    end_datetime = pd.Timestamp(end_date)
+
+    # Filter the DataFrame
+    filtered_df = df[(df['dt'] >= start_datetime) & (df['dt'] <= end_datetime)]
+
+    st.dataframe(filtered_df, use_container_width=True)
 
     st.write("Ad account and EUID list raw dump")
     st.dataframe(list_df, use_container_width=True)

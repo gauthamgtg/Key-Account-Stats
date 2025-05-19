@@ -427,14 +427,15 @@ union all
 SELECT receiver_id,buid::varchar,business_id::varchar,'adspends' as flag,currency,'01/01/2001' as start_date,'01/01/2001' as end_date,adspend_amount, gateway_charge,processing_fee,tax,convenience_fee,business_name, mobile, email, city, state, country_code,gst_number as gst_number
  from
 (
-SELECT a.euid as buid,a.ad_account as business_id,ad_account,date(payment_date)as dt, total_amount,receiver_id,currency,
+SELECT cast(a.euid as int) as buid,a.ad_account as business_id,ad_account,date(payment_date)as dt,
+ total_amount,receiver_id,currency,
 gateway_charge,adspend_amount,processing_fee,tax,convenience_fee,'enterprise' as flag,bu.business_name, bu.mobile, bu.email, bu.city, bu.state,bu.country_code,gst_number as gst_number
 from payment_trans_details a
 left join enterprise_users bu on a.euid = bu.euid 
 
 union all
 
-SELECT user_id as buid,business_id,ad_account_id,date(a.created_at)as dt, total_amount,payment_id as receiver_id,currency,
+SELECT user_id as buid,cast(business_id as varchar)business_id,ad_account_id,date(a.created_at)as dt, total_amount,payment_id as receiver_id,currency,
 gateway_processing_fee as gateway_charge,final_adspend_amount as adspend_amount,overage_fee as processing_fee,tax,
 0 as convenience_fee,'zocket.ai' as flag, bu.name, bu.mobile, bu.email, bu.city, bu.state,bu.country, gst_number as gst_number
 FROM
@@ -467,13 +468,13 @@ SELECT
 left join zocket_global.business_users bu on a.user_id = bu.id
 
 union all
-select zocket_user_id as buid,0 as bid,'master wallet' as ad_account_id,date(a.created_at)as dt, amount,payment_id as receiver_id,currency,
+select zocket_user_id as buid,'0' as bid,'master wallet' as ad_account_id,date(a.created_at)as dt, amount,payment_id as receiver_id,currency,
 gateway_processing_fee as gateway_charge,amount - gateway_processing_fee as adspend_amount,0 as processing_fee,tax,
 0 as convenience_fee,'zocket.ai wallet' as flag,bu.name, bu.mobile, bu.email, bu.city, bu.state,bu.country, gst_number as gst_number
 from zocket_global.partner_payment_transactions a
 left join zocket_global.business_users bu on a.zocket_user_id = bu.id
 )
-;'''
+'''
 
 # datong_api_query='''
 

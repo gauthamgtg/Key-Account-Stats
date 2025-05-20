@@ -207,7 +207,7 @@ WHERE
 #adlevel query
 zocket_ai_campaigns_spends_query='''
 select ggci.ad_account_id,ggci.currency,date(date_start) as dt,account_name,gc.campaign_id as campaign_id,c.name as campaign_name,
-case when date(bu.created_at) >= current_date - 30 then 'Onboarded <30d ago' else 'Onboarded >30d ago' end as User_flag,buid,
+case when date(bu.created_at) >= current_date - 30 then 'Onboarded <30d ago' else 'Onboarded >30d ago' end as User_flag,buid,bu.email,
 SUM(ggci.spend)spend
 FROM
     zocket_global.campaigns c
@@ -226,7 +226,7 @@ WHERE
     join zocket_global.fb_ads_age_gender_metrics_v3 ggci on ggci.ad_id = fbads.ad_id
 where date(date_start)>='2024-01-01' and date(date_start)<current_date
 and c.imported_at is null
-group by 1,2,3,4,5,6,7,8
+group by 1,2,3,4,5,6,7,8,9
 '''
 
 #disabled account query

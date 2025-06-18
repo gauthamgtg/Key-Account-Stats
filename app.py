@@ -406,7 +406,7 @@ from
 select us.id,	business_id,	business_user_id,	us.plan_id	,amount	,start_date	,end_date	,is_free_trial	,subscription_id	,subscription_schedule_id	,subscription_status	,cancelled_at	,cancel_at,	status	,source	,payment_transaction_id	,invoice_id	,renewed_at	,renewed_subscription_id	,downgraded_at	,downgraded_to_plan_id	,upgraded_at	,upgraded_to_plan_id	,deleted_at	,us.created_at	,us.updated_at	,free_trial_days	,initial_start_date	,user_enabled_custom_plan_id	,is_unlimited	, pt.payment_transcation_id
 from zocket_global.user_subscriptions us 
 inner join zocket_global.payment_transactions pt on us.payment_transaction_id = pt.id
-where us.source = 'STRIPE' 
+where us.source in ('STRIPE','SHOPIFY')
 ) a
 left join zocket_global.business_users bu on a.business_user_id = bu.id
 

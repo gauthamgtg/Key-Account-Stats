@@ -392,31 +392,34 @@ SELECT
                 ORDER BY poa.id DESC 
 )
 union all
-select zocket_user_id as buid,0 as bid,'master wallet' as ad_account_id,date(created_at)as dt, amount,payment_id as receiver_id,currency,
+select coalesce(p.platform_user_id,zocket_user_id) as buid,0 as bid,'master wallet' as ad_account_id,date(a.created_at)as dt, amount,payment_id as receiver_id,a.currency,
 gateway_processing_fee as gateway_charge,amount - gateway_processing_fee as adspend_amount,0 as processing_fee,tax,
-0 as convenience_fee,'zocket.ai wallet' as flag
-from zocket_global.partner_payment_transactions
+0 as convenience_fee,'Adspends' as flag,bu.name, bu.mobile, bu.email, bu.city, bu.state,bu.country, 'zocket.ai' as gst_number
+from zocket_global.partner_payment_transactions a
+left join zocket_global.business_users bu on a.zocket_user_id = bu.id
+left join zocket_global.partners p on a.partner_id = p.id
 )
 ;'''
 
-finance_all_trxn_query = '''
-SELECT payment_transcation_id, cast(business_user_id as VARCHAR)buid,cast(business_id as VARCHAR)bid,'zocketai sub' as flag,'usd' as currency,start_date,end_date,amount,0 as gateway_charge,0 as processing_fee,0 as tax,0 as convenience_fee, bu.name, bu.mobile, bu.email, bu.city, bu.state,bu.country, gst_number as gst_number
+finance_all_trxn_query = '''SELECT * FROM
+(
+SELECT payment_transcation_id, cast(business_user_id as VARCHAR)buid,cast(business_id as VARCHAR)bid,'Subscription' as flag,'usd' as currency,start_date,end_date,amount,0 as gateway_charge,0 as processing_fee,0 as tax,0 as convenience_fee, bu.name, bu.mobile, bu.email, bu.city, bu.state,bu.country, 'zocket.ai' as gst_number
 from
 (
 select us.id,	business_id,	business_user_id,	us.plan_id	,amount	,start_date	,end_date	,is_free_trial	,subscription_id	,subscription_schedule_id	,subscription_status	,cancelled_at	,cancel_at,	status	,source	,payment_transaction_id	,invoice_id	,renewed_at	,renewed_subscription_id	,downgraded_at	,downgraded_to_plan_id	,upgraded_at	,upgraded_to_plan_id	,deleted_at	,us.created_at	,us.updated_at	,free_trial_days	,initial_start_date	,user_enabled_custom_plan_id	,is_unlimited	, pt.payment_transcation_id
 from zocket_global.user_subscriptions us 
 inner join zocket_global.payment_transactions pt on us.payment_transaction_id = pt.id
-where us.source in ('STRIPE','SHOPIFY')
+where us.source = 'STRIPE' 
 ) a
 left join zocket_global.business_users bu on a.business_user_id = bu.id
 
 union all
 
-SELECT payment_id,cast(a.euid as VARCHAR)euid,cast(ad_account_id as varchar)adacc,'enterprise sub' as flag,'usd' as currency,start_date,end_date,usd_amount as amount,0 as gateway_charge,0 as processing_fee,0 as tax,0 as convenience_fee ,bu.business_name, bu.mobile, bu.email, bu.city, bu.state,bu.country_code,gst_number as gst_number
+SELECT payment_id,cast(a.euid as VARCHAR)euid,cast(ad_account_id as varchar)adacc,'Subscription' as flag,'usd' as currency,start_date,end_date,usd_amount as amount,0 as gateway_charge,0 as processing_fee,0 as tax,0 as convenience_fee ,bu.business_name, bu.mobile, bu.email, bu.city, bu.state,bu.country_code,gst_number as gst_number
 from
 (
 SELECT payment_id,euid,ad_account_id,transfer_ad_account_id,transfer_euid,transfer_amount,invoice_id,tranferred_at,
-'enterprise' as flag,sp.amount as sp_amount,usd.amount as usd_amount,usd.created_at as start_date,expiry_date as end_date, sp.usd_price_range
+'Subscription' as flag,sp.amount as sp_amount,usd.amount as usd_amount,usd.created_at as start_date,expiry_date as end_date, sp.usd_price_range
  from user_subscription_data usd
 left join subscription_plan sp on usd.plan_id = sp.plan_id
 ) a
@@ -424,20 +427,19 @@ left join enterprise_users bu on a.euid = bu.euid
 union all
 
 
-SELECT receiver_id,buid::varchar,business_id::varchar,'adspends' as flag,currency,'01/01/2001' as start_date,'01/01/2001' as end_date,adspend_amount, gateway_charge,processing_fee,tax,convenience_fee,business_name, mobile, email, city, state, country_code,gst_number as gst_number
+SELECT receiver_id,buid::varchar,business_id::varchar,'Adspends' as flag,currency,'01/01/2001' as start_date,'01/01/2001' as end_date,adspend_amount, gateway_charge,processing_fee,tax,convenience_fee,business_name, mobile, email, city, state, country_code,gst_number as gst_number
  from
 (
-SELECT cast(a.euid as int) as buid,a.ad_account as business_id,ad_account,date(payment_date)as dt,
- total_amount,receiver_id,currency,
-gateway_charge,adspend_amount,processing_fee,tax,convenience_fee,'enterprise' as flag,bu.business_name, bu.mobile, bu.email, bu.city, bu.state,bu.country_code,gst_number as gst_number
+SELECT a.euid as buid,a.euid as business_id,ad_account,date(payment_date)as dt, total_amount,receiver_id,currency,
+gateway_charge,adspend_amount,processing_fee,tax,convenience_fee,'Adspends' as flag,bu.business_name, bu.mobile, bu.email, bu.city, bu.state,bu.country_code,gst_number as gst_number
 from payment_trans_details a
 left join enterprise_users bu on a.euid = bu.euid 
 
 union all
 
-SELECT user_id as buid,cast(business_id as varchar)business_id,ad_account_id,date(a.created_at)as dt, total_amount,payment_id as receiver_id,currency,
+SELECT user_id as buid,business_id,ad_account_id,date(a.created_at)as dt, total_amount,payment_id as receiver_id,currency,
 gateway_processing_fee as gateway_charge,final_adspend_amount as adspend_amount,overage_fee as processing_fee,tax,
-0 as convenience_fee,'zocket.ai' as flag, bu.name, bu.mobile, bu.email, bu.city, bu.state,bu.country, gst_number as gst_number
+0 as convenience_fee,'Adspends' as flag, bu.name, bu.mobile, bu.email, bu.city, bu.state,bu.country, 'zocket.ai' as gst_number
 FROM
 (
 SELECT 
@@ -468,11 +470,13 @@ SELECT
 left join zocket_global.business_users bu on a.user_id = bu.id
 
 union all
-select zocket_user_id as buid,'0' as bid,'master wallet' as ad_account_id,date(a.created_at)as dt, amount,payment_id as receiver_id,currency,
+select coalesce(p.platform_user_id,zocket_user_id) as buid,0 as bid,'master wallet' as ad_account_id,date(a.created_at)as dt, amount,payment_id as receiver_id,a.currency,
 gateway_processing_fee as gateway_charge,amount - gateway_processing_fee as adspend_amount,0 as processing_fee,tax,
-0 as convenience_fee,'zocket.ai wallet' as flag,bu.name, bu.mobile, bu.email, bu.city, bu.state,bu.country, gst_number as gst_number
+0 as convenience_fee,'Adspends' as flag,bu.name, bu.mobile, bu.email, bu.city, bu.state,bu.country, 'zocket.ai' as gst_number
 from zocket_global.partner_payment_transactions a
 left join zocket_global.business_users bu on a.zocket_user_id = bu.id
+left join zocket_global.partners p on a.partner_id = p.id
+)
 )
 '''
 

@@ -97,7 +97,7 @@ with spends AS
         group by 1)
 
 select coalesce(cast(bp.buid as int),c.app_business_id) as euid,coalesce(eu.business_name,bp.name) as business_name,coalesce(eu.company_name,bp.brand_name) as company_name,dt,coalesce(b.name,d.name) as ad_account_name,
-coalesce(c.name,e.name) as business_manager_name,
+coalesce(c.name,e.name) as business_manager_name,coalesce(c.business_manager_id,e.business_manager_id) as business_manager_id,
 case when a.ad_account_id ='act_1090921776002942' then 'INR' else COALESCE(b.currency,d.currency) end as currency_code,a.ad_account_id,spend
 from 
     spends a
@@ -403,7 +403,7 @@ left join zocket_global.partners p on a.partner_id = p.id
 
 finance_all_trxn_query = '''SELECT * FROM
 (
-SELECT payment_transcation_id, cast(business_user_id as VARCHAR)buid,cast(business_id as VARCHAR)bid,'Subscription' as flag,'usd' as currency,start_date,end_date,amount,0 as gateway_charge,0 as processing_fee,0 as tax,0 as convenience_fee, bu.name, bu.mobile, bu.email, bu.city, bu.state,bu.country, 'zocket.ai' as gst_number
+SELECT payment_transcation_id, cast(business_user_id as VARCHAR)buid,cast(business_id as VARCHAR)bid,'Subscription' as flag,'usd' as currency,start_date,end_date,amount,0 as gateway_charge,0 as processing_fee,0 as tax,0 as convenience_fee, bu.name, bu.mobile, bu.email, bu.city, bu.state,bu.country, bu.gst_number as gst_number
 from
 (
 select us.id,	business_id,	business_user_id,	us.plan_id	,amount	,start_date	,end_date	,is_free_trial	,subscription_id	,subscription_schedule_id	,subscription_status	,cancelled_at	,cancel_at,	status	,source	,payment_transaction_id	,invoice_id	,renewed_at	,renewed_subscription_id	,downgraded_at	,downgraded_to_plan_id	,upgraded_at	,upgraded_to_plan_id	,deleted_at	,us.created_at	,us.updated_at	,free_trial_days	,initial_start_date	,user_enabled_custom_plan_id	,is_unlimited	, pt.payment_transcation_id
@@ -439,7 +439,7 @@ union all
 
 SELECT user_id as buid,business_id,ad_account_id,date(a.created_at)as dt, total_amount,payment_id as receiver_id,currency,
 gateway_processing_fee as gateway_charge,final_adspend_amount as adspend_amount,overage_fee as processing_fee,tax,
-0 as convenience_fee,'Adspends' as flag, bu.name, bu.mobile, bu.email, bu.city, bu.state,bu.country, 'zocket.ai' as gst_number
+0 as convenience_fee,'Adspends' as flag, bu.name, bu.mobile, bu.email, bu.city, bu.state,bu.country, bu.gst_number as gst_number
 FROM
 (
 SELECT 
@@ -472,7 +472,7 @@ left join zocket_global.business_users bu on a.user_id = bu.id
 union all
 select coalesce(p.platform_user_id,zocket_user_id) as buid,0 as bid,'master wallet' as ad_account_id,date(a.created_at)as dt, amount,payment_id as receiver_id,a.currency,
 gateway_processing_fee as gateway_charge,amount - gateway_processing_fee as adspend_amount,0 as processing_fee,tax,
-0 as convenience_fee,'Adspends' as flag,bu.name, bu.mobile, bu.email, bu.city, bu.state,bu.country, 'zocket.ai' as gst_number
+0 as convenience_fee,'Adspends' as flag,bu.name, bu.mobile, bu.email, bu.city, bu.state,bu.country, bu.gst_number as gst_number
 from zocket_global.partner_payment_transactions a
 left join zocket_global.business_users bu on a.zocket_user_id = bu.id
 left join zocket_global.partners p on a.partner_id = p.id
@@ -954,6 +954,16 @@ elif selected == "Overall Stats - Ind" and st.session_state.status == "verified"
     else:  # Date
         grouped_df = indian_df.groupby([pd.to_datetime(indian_df['dt']).dt.strftime('%Y-%m-%d'), 'euid', 'ad_account_id', 'ad_account_name', 'currency_code'])['spend'].sum().reset_index()
 
+    # Add start date and end date filter
+    st.write("Select Date Range to Filter Spend Data:")
+    min_date = pd.to_datetime(grouped_df['dt']).min().date()
+    max_date = pd.to_datetime(grouped_df['dt']).max().date()
+    start_date = st.date_input("Start Date", value=min_date, min_value=min_date, max_value=max_date)
+    end_date = st.date_input("End Date", value=max_date, min_value=min_date, max_value=max_date)
+
+    # Filter grouped_df by selected date range
+    grouped_df = grouped_df[(pd.to_datetime(grouped_df['dt']).dt.date >= start_date) & (pd.to_datetime(grouped_df['dt']).dt.date <= end_date)]
+
     st.write(f"Spend Data Grouped by {grouping}:")
     grouped_df.index += 1
     grouped_df = grouped_df.sort_values(by='dt', ascending=False)
@@ -1116,11 +1126,23 @@ elif selected == "Overall Stats - US" and st.session_state.status == "verified":
         grouped_df = us_df.groupby([pd.to_datetime(us_df['dt']).dt.strftime('%b %y'), 'euid', 'ad_account_id', 'ad_account_name', 'currency_code'])['spend_in_usd'].sum().reset_index()
     else:  # Date
         grouped_df = us_df.groupby([pd.to_datetime(us_df['dt']).dt.strftime('%Y-%m-%d'), 'euid', 'ad_account_id', 'ad_account_name', 'currency_code'])['spend_in_usd'].sum().reset_index()
+   
+    # Add start date and end date filter
+    st.write("Select Date Range to Filter Spend Data:")
+    min_date = pd.to_datetime(grouped_df['dt']).min().date()
+    max_date = pd.to_datetime(grouped_df['dt']).max().date()
+    start_date = st.date_input("Start Date", value=min_date, min_value=min_date, max_value=max_date)
+    end_date = st.date_input("End Date", value=max_date, min_value=min_date, max_value=max_date)
+
+    # Filter grouped_df by selected date range
+    grouped_df = grouped_df[(pd.to_datetime(grouped_df['dt']).dt.date >= start_date) & (pd.to_datetime(grouped_df['dt']).dt.date <= end_date)]
 
     st.write(f"Spend Data Grouped by {grouping}:")
     grouped_df.index += 1
     grouped_df = grouped_df.sort_values(by='dt', ascending=False)
-    # st.dataframe(grouped_df, use_container_width=True)
+    # Replace 'Unknown' in 'euid' with 0 and ensure numeric type
+    grouped_df['euid'] = grouped_df['euid'].replace('Unknown', 0)
+    grouped_df['euid'] = pd.to_numeric(grouped_df['euid'], errors='coerce').fillna(0).astype(int)
     pivot_df = grouped_df.pivot(index=['euid','ad_account_name','ad_account_id','currency_code'], columns='dt', values='spend_in_usd')
     pivot_df = pivot_df.reindex(sorted(pivot_df.columns, reverse=True), axis=1)
     st.dataframe(pivot_df, use_container_width=True)

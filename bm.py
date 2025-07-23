@@ -217,7 +217,8 @@ def convert_to_usd(row):
 # Create the 'spend_in_usd' column
 df['spend_in_usd'] = df.apply(lambda row: convert_to_usd(row), axis=1)
 df['spend_in_usd'] = df['spend_in_usd'].map(int)
-
+df['ad_account_name'] = df['ad_account_name'].str.replace('zocket manager Ad Account', '', regex=True)
+df['ad_account_name'] = df['ad_account_name'].str.replace('Zocket manager ad account', '', regex=True)
 
 ind_df = df[df['currency_code'] == 'INR']
 us_df = df[df['currency_code'] != 'INR']

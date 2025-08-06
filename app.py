@@ -1497,23 +1497,24 @@ elif selected == "FB API Campaign spends" and st.session_state.status == "verifi
 
     # Predefine default values for specific currencies
     default_values = {
-                        'EUR': 1.08,
-                        'GBP': 1.30,
-                        'AUD': 0.66,
+                        'EUR': 1.16,
+                        'GBP': 1.33,
+                        'AUD': 0.65,
                         'INR': 0.012,
                         'THB': 0.029,
                         'KRW': 0.00072,
-                        'CAD' : 0.72,
+                        'CAD' : 0.73,
                         'BRL' :0.18,
                         'TRY':0.029,
                         'VND':0.000040,
                         'AED':0.27,
-                        'RON': 0.22,
+                        'RON': 0.23,
                         'ZAR':0.057,
                         'NOK':0.092,
                         'SAR':0.27,
                         'MXN':0.050
                     }
+
 
     # Display input boxes for each unique currency code other than 'USD'
     st.write("Enter conversion rates for the following currencies:")

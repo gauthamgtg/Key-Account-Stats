@@ -715,8 +715,8 @@ if selected == "Key Account Stats" and st.session_state.status == "verified":
 
     with col2:
 
-        # Step 2: Ask the customer to choose grouping (year, month, week, or date)
-        grouping = st.selectbox('Choose Grouping', ['Year', 'Month', 'Week', 'Date'], index=1)
+        # Step 2: Ask the customer to choose grouping (year, quarter, month, week, or date)
+        grouping = st.selectbox('Choose Grouping', ['Year', 'Quarter', 'Month', 'Week', 'Date'], index=1)
 
     df = df.merge(disabled_account_df[['ad_account_id', 'flag']], on='ad_account_id', how='left')
 
@@ -773,6 +773,8 @@ if selected == "Key Account Stats" and st.session_state.status == "verified":
     # Assuming your 'dt' column is already in date format (e.g., YYYY-MM-DD)
     if grouping == 'Year':
         filtered_df.loc[:, 'grouped_date'] = filtered_df['dt'].apply(lambda x: x.strftime('%Y'))  # Year format as 2024
+    elif grouping == 'Quarter':
+        filtered_df.loc[:, 'grouped_date'] = filtered_df['dt'].apply(lambda x: x.to_period('Q').astype(str))  # Quarter format as 2024Q1
     elif grouping == 'Month':
         filtered_df.loc[:, 'grouped_date'] = filtered_df['dt'].apply(lambda x: x.strftime('%b-%y'))  # Month format as Jan-24
     elif grouping == 'Week':
@@ -787,6 +789,8 @@ if selected == "Key Account Stats" and st.session_state.status == "verified":
         # Sort the columns by date
     if grouping == 'Year':
         pivot_df = pivot_df[sorted(pivot_df.columns, key=lambda x: pd.to_datetime(x, format='%Y'), reverse=True)]
+    elif grouping == 'Quarter':
+        pivot_df = pivot_df[sorted(pivot_df.columns, key=lambda x: pd.to_datetime(x), reverse=True)]
     elif grouping == 'Month':
         pivot_df = pivot_df[sorted(pivot_df.columns, key=lambda x: pd.to_datetime(x, format='%b-%y'), reverse=True)]
     elif grouping == 'Week':
@@ -946,33 +950,37 @@ elif selected == "Overall Stats - Ind" and st.session_state.status == "verified"
 
     indian_df['euid'].replace('Unknown', 0, inplace=True)
     # Group by
-    grouping = st.selectbox("Group by", ["Year", "Month", "Date"])
-    if grouping == "Year":
-        grouped_df = indian_df.groupby([pd.to_datetime(indian_df['dt']).dt.year, 'euid', 'ad_account_id', 'ad_account_name', 'currency_code'])['spend'].sum().reset_index()
-    elif grouping == "Month":
-        grouped_df = indian_df.groupby([pd.to_datetime(indian_df['dt']).dt.strftime('%b %y'), 'euid', 'ad_account_id', 'ad_account_name', 'currency_code'])['spend'].sum().reset_index()
-    else:  # Date
-        grouped_df = indian_df.groupby([pd.to_datetime(indian_df['dt']).dt.strftime('%Y-%m-%d'), 'euid', 'ad_account_id', 'ad_account_name', 'currency_code'])['spend'].sum().reset_index()
+    grouping = st.selectbox("Group by", ["Year", "Quarter", "Month", "Date"])
 
     # Add start date and end date filter
     st.write("Select Date Range to Filter Spend Data:")
-    # Remove missing or invalid dates before conversion
-    valid_dt = grouped_df['dt'].dropna()
-    valid_dt = valid_dt[valid_dt.apply(lambda x: isinstance(x, str) or isinstance(x, (pd.Timestamp, datetime, date)))]
+    
+    # Get min and max dates from original data for date inputs
     try:
-        min_date = pd.to_datetime(valid_dt, errors='coerce').dropna().min().date()
-        max_date = pd.to_datetime(valid_dt, errors='coerce').dropna().max().date()
+        min_date = pd.to_datetime(indian_df['dt']).min().date()
+        max_date = pd.to_datetime(indian_df['dt']).max().date()
     except Exception:
         min_date = date.today()
         max_date = date.today()
+    
     start_date = st.date_input("Start Date", value=min_date, min_value=min_date, max_value=max_date)
     end_date = st.date_input("End Date", value=max_date, min_value=min_date, max_value=max_date)
 
-    # Filter grouped_df by selected date range
-    grouped_df = grouped_df[
-        (pd.to_datetime(grouped_df['dt'], errors='coerce').dt.date >= start_date) &
-        (pd.to_datetime(grouped_df['dt'], errors='coerce').dt.date <= end_date)
+    # Filter original data by selected date range before grouping
+    indian_df_filtered = indian_df[
+        (pd.to_datetime(indian_df['dt'], errors='coerce').dt.date >= start_date) &
+        (pd.to_datetime(indian_df['dt'], errors='coerce').dt.date <= end_date)
     ]
+    
+    # Re-group the filtered data
+    if grouping == "Year":
+        grouped_df = indian_df_filtered.groupby([pd.to_datetime(indian_df_filtered['dt']).dt.year, 'euid', 'ad_account_id', 'ad_account_name', 'currency_code'])['spend'].sum().reset_index()
+    elif grouping == "Quarter":
+        grouped_df = indian_df_filtered.groupby([pd.to_datetime(indian_df_filtered['dt']).dt.to_period('Q').astype(str), 'euid', 'ad_account_id', 'ad_account_name', 'currency_code'])['spend'].sum().reset_index()
+    elif grouping == "Month":
+        grouped_df = indian_df_filtered.groupby([pd.to_datetime(indian_df_filtered['dt']).dt.strftime('%b %y'), 'euid', 'ad_account_id', 'ad_account_name', 'currency_code'])['spend'].sum().reset_index()
+    else:  # Date
+        grouped_df = indian_df_filtered.groupby([pd.to_datetime(indian_df_filtered['dt']).dt.strftime('%Y-%m-%d'), 'euid', 'ad_account_id', 'ad_account_name', 'currency_code'])['spend'].sum().reset_index()
 
     st.write(f"Spend Data Grouped by {grouping}:")
     grouped_df.index += 1
@@ -1129,13 +1137,7 @@ elif selected == "Overall Stats - US" and st.session_state.status == "verified":
     st.dataframe(top_spenders, use_container_width=True)
 
     # Group by
-    grouping = st.selectbox("Group by", ["Year", "Month", "Date"])
-    if grouping == "Year":
-        grouped_df = us_df.groupby([pd.to_datetime(us_df['dt']).dt.year, 'euid', 'ad_account_id', 'ad_account_name', 'currency_code'])['spend_in_usd'].sum().reset_index()
-    elif grouping == "Month":
-        grouped_df = us_df.groupby([pd.to_datetime(us_df['dt']).dt.strftime('%b %y'), 'euid', 'ad_account_id', 'ad_account_name', 'currency_code'])['spend_in_usd'].sum().reset_index()
-    else:  # Date
-        grouped_df = us_df.groupby([pd.to_datetime(us_df['dt']).dt.strftime('%Y-%m-%d'), 'euid', 'ad_account_id', 'ad_account_name', 'currency_code'])['spend_in_usd'].sum().reset_index()
+    grouping = st.selectbox("Group by", ["Year", "Quarter", "Month", "Date"])
    
     # Add start date and end date filter
     st.write("Select Date Range to Filter Spend Data:")
@@ -1146,25 +1148,21 @@ elif selected == "Overall Stats - US" and st.session_state.status == "verified":
     start_date = st.date_input("Start Date", value=min_date, min_value=min_date, max_value=max_date)
     end_date = st.date_input("End Date", value=max_date, min_value=min_date, max_value=max_date)
 
-    # Filter grouped_df by selected date range based on grouping type
+    # Filter original data by selected date range before grouping
+    us_df_filtered = us_df[
+        (pd.to_datetime(us_df['dt'], errors='coerce').dt.date >= start_date) &
+        (pd.to_datetime(us_df['dt'], errors='coerce').dt.date <= end_date)
+    ]
+    
+    # Re-group the filtered data
     if grouping == "Year":
-        # For year grouping, filter by year
-        start_year = start_date.year
-        end_year = end_date.year
-        grouped_df = grouped_df[(grouped_df['dt'] >= start_year) & (grouped_df['dt'] <= end_year)]
+        grouped_df = us_df_filtered.groupby([pd.to_datetime(us_df_filtered['dt']).dt.year, 'euid', 'ad_account_id', 'ad_account_name', 'currency_code'])['spend_in_usd'].sum().reset_index()
+    elif grouping == "Quarter":
+        grouped_df = us_df_filtered.groupby([pd.to_datetime(us_df_filtered['dt']).dt.to_period('Q').astype(str), 'euid', 'ad_account_id', 'ad_account_name', 'currency_code'])['spend_in_usd'].sum().reset_index()
     elif grouping == "Month":
-        # For month grouping, convert dates to month format and filter
-        start_month = pd.to_datetime(start_date).strftime('%b %y')
-        end_month = pd.to_datetime(end_date).strftime('%b %y')
-        # Create a date range and convert to month format for comparison
-        date_range = pd.date_range(start=start_date, end=end_date, freq='MS')
-        valid_months = [pd.to_datetime(d).strftime('%b %y') for d in date_range]
-        grouped_df = grouped_df[grouped_df['dt'].isin(valid_months)]
+        grouped_df = us_df_filtered.groupby([pd.to_datetime(us_df_filtered['dt']).dt.strftime('%b %y'), 'euid', 'ad_account_id', 'ad_account_name', 'currency_code'])['spend_in_usd'].sum().reset_index()
     else:  # Date
-        # For date grouping, convert dt back to datetime for comparison
-        grouped_df['dt_datetime'] = pd.to_datetime(grouped_df['dt'])
-        grouped_df = grouped_df[(grouped_df['dt_datetime'].dt.date >= start_date) & (grouped_df['dt_datetime'].dt.date <= end_date)]
-        grouped_df = grouped_df.drop('dt_datetime', axis=1)
+        grouped_df = us_df_filtered.groupby([pd.to_datetime(us_df_filtered['dt']).dt.strftime('%Y-%m-%d'), 'euid', 'ad_account_id', 'ad_account_name', 'currency_code'])['spend_in_usd'].sum().reset_index()
 
     st.write(f"Spend Data Grouped by {grouping}:")
     grouped_df.index += 1
@@ -1512,7 +1510,7 @@ elif selected == "FB API Campaign spends" and st.session_state.status == "verifi
 
     with col2:
 
-        grouping = st.selectbox('Choose Grouping', ['Year', 'Month', 'Week', 'Date'], index=1)
+        grouping = st.selectbox('Choose Grouping', ['Year', 'Quarter', 'Month', 'Week', 'Date'], index=1)
 
         end_date = st.date_input("End Date", value=ai_campaign_spends_df['dt'].max())
 
@@ -1588,6 +1586,8 @@ elif selected == "FB API Campaign spends" and st.session_state.status == "verifi
     # Assuming your 'dt' column is already in date format (e.g., YYYY-MM-DD)
     if grouping == 'Year':
         ai_campaign_spends_df.loc[:, 'grouped_date'] = ai_campaign_spends_df['dt'].apply(lambda x: x.strftime('%Y'))  # Year format as 2024
+    elif grouping == 'Quarter':
+        ai_campaign_spends_df.loc[:, 'grouped_date'] = ai_campaign_spends_df['dt'].apply(lambda x: x.to_period('Q').astype(str))  # Quarter format as 2024Q1
     elif grouping == 'Month':
         ai_campaign_spends_df.loc[:, 'grouped_date'] = ai_campaign_spends_df['dt'].apply(lambda x: x.strftime('%b-%y'))  # Month format as Jan-24
     elif grouping == 'Week':
@@ -1682,6 +1682,8 @@ elif selected == "FB API Campaign spends" and st.session_state.status == "verifi
     # Sort the columns by date in descending order
     if grouping == 'Year':
         pivot_df = pivot_df[sorted(pivot_df.columns, key=lambda x: pd.to_datetime(x, format='%Y'), reverse=True)]
+    elif grouping == 'Quarter':
+        pivot_df = pivot_df[sorted(pivot_df.columns, key=lambda x: pd.to_datetime(x), reverse=True)]
     elif grouping == 'Month':
         pivot_df = pivot_df[sorted(pivot_df.columns, key=lambda x: pd.to_datetime(x, format='%b-%y'), reverse=True)]
     elif grouping == 'Week':
@@ -1700,6 +1702,8 @@ elif selected == "FB API Campaign spends" and st.session_state.status == "verifi
     # Sort the columns by date in descending order
     if grouping == 'Year':
         pivot_df = pivot_df[sorted(pivot_df.columns, key=lambda x: pd.to_datetime(x, format='%Y'), reverse=True)]
+    elif grouping == 'Quarter':
+        pivot_df = pivot_df[sorted(pivot_df.columns, key=lambda x: pd.to_datetime(x), reverse=True)]
     elif grouping == 'Month':
         pivot_df = pivot_df[sorted(pivot_df.columns, key=lambda x: pd.to_datetime(x, format='%b-%y'), reverse=True)]
     elif grouping == 'Week':
@@ -1722,6 +1726,8 @@ elif selected == "FB API Campaign spends" and st.session_state.status == "verifi
     # Sort the columns by date in descending order
     if grouping == 'Year':
         pivot_df = pivot_df[sorted(pivot_df.columns, key=lambda x: pd.to_datetime(x, format='%Y'), reverse=True)]
+    elif grouping == 'Quarter':
+        pivot_df = pivot_df[sorted(pivot_df.columns, key=lambda x: pd.to_datetime(x), reverse=True)]
     elif grouping == 'Month':
         pivot_df = pivot_df[sorted(pivot_df.columns, key=lambda x: pd.to_datetime(x, format='%b-%y'), reverse=True)]
     elif grouping == 'Week':

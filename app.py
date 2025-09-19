@@ -956,13 +956,23 @@ elif selected == "Overall Stats - Ind" and st.session_state.status == "verified"
 
     # Add start date and end date filter
     st.write("Select Date Range to Filter Spend Data:")
-    min_date = pd.to_datetime(grouped_df['dt']).min().date()
-    max_date = pd.to_datetime(grouped_df['dt']).max().date()
+    # Remove missing or invalid dates before conversion
+    valid_dt = grouped_df['dt'].dropna()
+    valid_dt = valid_dt[valid_dt.apply(lambda x: isinstance(x, str) or isinstance(x, (pd.Timestamp, datetime, date)))]
+    try:
+        min_date = pd.to_datetime(valid_dt, errors='coerce').dropna().min().date()
+        max_date = pd.to_datetime(valid_dt, errors='coerce').dropna().max().date()
+    except Exception:
+        min_date = date.today()
+        max_date = date.today()
     start_date = st.date_input("Start Date", value=min_date, min_value=min_date, max_value=max_date)
     end_date = st.date_input("End Date", value=max_date, min_value=min_date, max_value=max_date)
 
     # Filter grouped_df by selected date range
-    grouped_df = grouped_df[(pd.to_datetime(grouped_df['dt']).dt.date >= start_date) & (pd.to_datetime(grouped_df['dt']).dt.date <= end_date)]
+    grouped_df = grouped_df[
+        (pd.to_datetime(grouped_df['dt'], errors='coerce').dt.date >= start_date) &
+        (pd.to_datetime(grouped_df['dt'], errors='coerce').dt.date <= end_date)
+    ]
 
     st.write(f"Spend Data Grouped by {grouping}:")
     grouped_df.index += 1
@@ -1129,13 +1139,32 @@ elif selected == "Overall Stats - US" and st.session_state.status == "verified":
    
     # Add start date and end date filter
     st.write("Select Date Range to Filter Spend Data:")
-    min_date = pd.to_datetime(grouped_df['dt']).min().date()
-    max_date = pd.to_datetime(grouped_df['dt']).max().date()
+    
+    # Get min and max dates from original data for date inputs
+    min_date = pd.to_datetime(us_df['dt']).min().date()
+    max_date = pd.to_datetime(us_df['dt']).max().date()
     start_date = st.date_input("Start Date", value=min_date, min_value=min_date, max_value=max_date)
     end_date = st.date_input("End Date", value=max_date, min_value=min_date, max_value=max_date)
 
-    # Filter grouped_df by selected date range
-    grouped_df = grouped_df[(pd.to_datetime(grouped_df['dt']).dt.date >= start_date) & (pd.to_datetime(grouped_df['dt']).dt.date <= end_date)]
+    # Filter grouped_df by selected date range based on grouping type
+    if grouping == "Year":
+        # For year grouping, filter by year
+        start_year = start_date.year
+        end_year = end_date.year
+        grouped_df = grouped_df[(grouped_df['dt'] >= start_year) & (grouped_df['dt'] <= end_year)]
+    elif grouping == "Month":
+        # For month grouping, convert dates to month format and filter
+        start_month = pd.to_datetime(start_date).strftime('%b %y')
+        end_month = pd.to_datetime(end_date).strftime('%b %y')
+        # Create a date range and convert to month format for comparison
+        date_range = pd.date_range(start=start_date, end=end_date, freq='MS')
+        valid_months = [pd.to_datetime(d).strftime('%b %y') for d in date_range]
+        grouped_df = grouped_df[grouped_df['dt'].isin(valid_months)]
+    else:  # Date
+        # For date grouping, convert dt back to datetime for comparison
+        grouped_df['dt_datetime'] = pd.to_datetime(grouped_df['dt'])
+        grouped_df = grouped_df[(grouped_df['dt_datetime'].dt.date >= start_date) & (grouped_df['dt_datetime'].dt.date <= end_date)]
+        grouped_df = grouped_df.drop('dt_datetime', axis=1)
 
     st.write(f"Spend Data Grouped by {grouping}:")
     grouped_df.index += 1

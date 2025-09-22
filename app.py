@@ -793,7 +793,7 @@ if selected == "Key Account Stats" and st.session_state.status == "verified":
     if grouping == 'Year':
         pivot_df = pivot_df[sorted(pivot_df.columns, key=lambda x: pd.to_datetime(x, format='%Y'), reverse=True)]
     elif grouping == 'Quarter':
-        pivot_df = pivot_df[sorted(pivot_df.columns, key=lambda x: pd.to_datetime(x), reverse=True)]
+        pivot_df = pivot_df[sorted(pivot_df.columns, key=lambda x: pd.Period(x), reverse=True)]
     elif grouping == 'Month':
         pivot_df = pivot_df[sorted(pivot_df.columns, key=lambda x: pd.to_datetime(x, format='%b-%y'), reverse=True)]
     elif grouping == 'Week':

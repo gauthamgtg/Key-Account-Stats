@@ -716,7 +716,7 @@ if selected == "Key Account Stats" and st.session_state.status == "verified":
     with col2:
 
         # Step 2: Ask the customer to choose grouping (year, quarter, month, week, or date)
-        grouping = st.selectbox('Choose Grouping', ['Year', 'Quarter', 'Month', 'Week', 'Date'], index=1)
+        grouping = st.selectbox('Choose Grouping', ['Year', 'Quarter', 'Month', 'Week', 'Date'], index=4)
 
     df = df.merge(disabled_account_df[['ad_account_id', 'flag']], on='ad_account_id', how='left')
 
@@ -770,7 +770,10 @@ if selected == "Key Account Stats" and st.session_state.status == "verified":
             #, f"{ind_spend_change:,.2f}%"
             )
 
-    # Assuming your 'dt' column is already in date format (e.g., YYYY-MM-DD)
+    # Convert dt column to datetime first
+    filtered_df['dt'] = pd.to_datetime(filtered_df['dt'])
+    
+    # Assuming your 'dt' column is now in datetime format
     if grouping == 'Year':
         filtered_df.loc[:, 'grouped_date'] = filtered_df['dt'].apply(lambda x: x.strftime('%Y'))  # Year format as 2024
     elif grouping == 'Quarter':

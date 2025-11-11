@@ -1179,6 +1179,20 @@ elif selected == "Overall Stats - US" and st.session_state.status == "verified":
     grouped_df['euid'] = pd.to_numeric(grouped_df['euid'], errors='coerce').fillna(0).astype(int)
     pivot_df = grouped_df.pivot(index=['euid','ad_account_name','ad_account_id','currency_code'], columns='dt', values='spend_in_usd')
     pivot_df = pivot_df.reindex(sorted(pivot_df.columns, reverse=True), axis=1)
+    
+    # Calculate current month spend for each account and add to pivot table
+    us_current_month_df_copy = us_current_month_df.copy()
+    us_current_month_df_copy['euid'] = us_current_month_df_copy['euid'].replace('Unknown', 0)
+    us_current_month_df_copy['euid'] = pd.to_numeric(us_current_month_df_copy['euid'], errors='coerce').fillna(0).astype(int)
+    current_month_spend_by_account = us_current_month_df_copy.groupby(['euid','ad_account_name','ad_account_id','currency_code'])['spend_in_usd'].sum().reset_index()
+    current_month_spend_by_account = current_month_spend_by_account.set_index(['euid','ad_account_name','ad_account_id','currency_code'])
+    pivot_df['Current Month Spend'] = current_month_spend_by_account['spend_in_usd']
+    pivot_df['Current Month Spend'] = pivot_df['Current Month Spend'].fillna(0)
+    
+    # Reorder columns to put Current Month Spend at the beginning
+    cols = ['Current Month Spend'] + [col for col in pivot_df.columns if col != 'Current Month Spend']
+    pivot_df = pivot_df[cols]
+    
     st.dataframe(pivot_df, use_container_width=True)
 
 
@@ -2590,7 +2604,7 @@ elif selected == "FB Reward Ad accounts stats" and st.session_state.status == "v
         return link
 
     # Load ad account IDs from Google Sheet
-    sheet_url = "https://docs.google.com/spreadsheets/d/1mRUXiE1JPg6L1p26XrnHZXffPIsTnAl-KIFE2GFeEus/export?format=csv"
+    sheet_url = "https://docs.google.com/spreadsheets/d/1XHr8l5k7DOfJeSgt5mapw1vOg1LxYEPmVxwJcVSROus/export?format=csv"
     sheet_df = pd.read_csv(sheet_url)
     ad_account_ids = sheet_df['ad_account_id'].dropna().astype(str).tolist()
 

@@ -265,7 +265,7 @@ col_ind, col_us = st.columns(2)
 top10_ind = ind_df[ind_df['dt'] == yesterday].sort_values('spend', ascending=False).head(10)
 col_ind.write("IND BM")
 col_ind.dataframe(
-    top10_ind[['euid','ad_account_id', 'ad_account_name', 'business_name', 'spend']].rename(columns={'spend': 'Spend (INR)'}),
+    top10_ind[['euid','ad_account_id', 'ad_account_name', 'spend']].rename(columns={'spend': 'Spend (INR)'}),
     use_container_width=True,
     hide_index=True
 )
@@ -274,7 +274,7 @@ col_ind.dataframe(
 top10_us = us_df[us_df['dt'] == yesterday].sort_values('spend_in_usd', ascending=False).head(10)
 col_us.write("US BM")
 col_us.dataframe(
-    top10_us[['euid','ad_account_id', 'ad_account_name', 'business_name','spend_in_usd']].rename(columns={'spend_in_usd': 'Spend (USD)'}),
+    top10_us[['euid','ad_account_id', 'ad_account_name','spend_in_usd']].rename(columns={'spend_in_usd': 'Spend (USD)'}),
     use_container_width=True,
     hide_index=True
 )

@@ -82,7 +82,7 @@ def redshift_connection(dbname, user, password, host, port):
     return decorator
 
 query = '''
-SELECT * FROM zocket_global.fb_child_ad_accounts
+SELECT name,ad_account_id,currency,amount_due FROM zocket_global.fb_child_ad_accounts where amount_due>0 order by amount_due desc
 '''
 
 

@@ -86,7 +86,7 @@ SELECT name,ad_account_id,currency,amount_due FROM zocket_global.fb_child_ad_acc
 '''
 
 
-@st.cache_data(ttl=36400)  # 86400 seconds = 24 hours
+# @st.cache_data(ttl=36400)  # 86400 seconds = 24 hours
 @redshift_connection(db,name,passw,server,port)
 def execute_query(connection, cursor,query):
 

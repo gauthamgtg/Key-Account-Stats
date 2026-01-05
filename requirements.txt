@@ -3,7 +3,6 @@ streamlit
 streamlit_option_menu
 psycopg2-binary
 pandas
-boto3
 gdown
 stripe
 numpy

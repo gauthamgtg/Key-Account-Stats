@@ -8,33 +8,19 @@ import psycopg2
 from functools import wraps
 import pandas as pd
 import hmac
-import boto3
 import json
 import stripe
 import numpy
 import requests
 from urllib.parse import urlparse
 
-client = boto3.client(
-    "secretsmanager",
-    region_name=st.secrets["AWS_DEFAULT_REGION"],
-    aws_access_key_id=st.secrets["AWS_ACCESS_KEY_ID"],
-    aws_secret_access_key=st.secrets["AWS_SECRET_ACCESS_KEY"]
-)
-
-def get_secret(secret_name):
-    # Retrieve the secret value
-    response = client.get_secret_value(SecretId=secret_name)
-    return json.loads(response["SecretString"])
-
-# Replace 'your-secret-name' with the actual secret name in AWS Secrets Manager
-secret = get_secret("G-streamlit-KAT")
-db = secret["db"]
-name = secret["name"]
-passw = secret["passw"]
-server = secret["server"]
-port = secret["port"]
-stripe_key = secret["stripe"]
+# Read credentials directly from Streamlit secrets
+db = st.secrets["db"]
+name = st.secrets["name"]
+passw = st.secrets["passw"]
+server = st.secrets["server"]
+port = st.secrets["port"]
+stripe_key = st.secrets["stripe"]
 
 
 st.set_page_config( page_title = "Spend Stats",

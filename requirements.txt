@@ -8,3 +8,4 @@ stripe
 numpy
 requests
 altair<5
+imghdr

@@ -168,20 +168,20 @@ div[data-testid="column"] > div[data-testid="stVerticalBlock"] > div[data-testid
     width: 100%;
 }
 div[data-testid="stMetric"] {
-    background: linear-gradient(145deg, #ffffff 0%, #f1f5f9 100%);
-    border: 1px solid #cbd5e1;
+    background: linear-gradient(155deg, #1e293b 0%, #0f172a 55%, #172554 100%);
+    border: 1px solid rgba(148, 163, 184, 0.35);
     border-radius: 12px;
     padding: 18px 20px 16px 20px;
     min-height: 108px;
-    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.06);
     transition: box-shadow 0.2s, border-color 0.2s;
 }
 div[data-testid="stMetric"]:hover {
-    box-shadow: 0 4px 14px rgba(15, 23, 42, 0.1);
-    border-color: #94a3b8;
+    box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+    border-color: rgba(96, 165, 250, 0.45);
 }
 div[data-testid="stMetric"] label {
-    color: #0f172a !important;
+    color: #cbd5e1 !important;
     font-size: 0.9rem !important;
     font-weight: 600 !important;
     text-transform: none !important;
@@ -192,7 +192,7 @@ div[data-testid="stMetric"] label {
 }
 div[data-testid="stMetric"] label *,
 div[data-testid="stMetric"] [data-testid="stMarkdownContainer"] p {
-    color: #0f172a !important;
+    color: #cbd5e1 !important;
     white-space: normal !important;
     overflow: visible !important;
     text-overflow: unset !important;
@@ -200,7 +200,7 @@ div[data-testid="stMetric"] [data-testid="stMarkdownContainer"] p {
     line-height: 1.35 !important;
 }
 div[data-testid="stMetric"] [data-testid="stMetricValue"] {
-    color: #0f172a !important;
+    color: #f8fafc !important;
     font-weight: 800 !important;
     font-size: 1.85rem !important;
     letter-spacing: -0.02em;
@@ -208,7 +208,7 @@ div[data-testid="stMetric"] [data-testid="stMetricValue"] {
 div[data-testid="stMetric"] [data-testid="stMetricDelta"] {
     font-size: 0.8125rem !important;
     font-weight: 500 !important;
-    margin-top: 6px;
+    margin-top: 8px;
 }
 div[data-testid="stMetric"] [data-testid="stMetricDelta"] *,
 div[data-testid="stMetric"] [data-testid="stMetricDelta"] svg {

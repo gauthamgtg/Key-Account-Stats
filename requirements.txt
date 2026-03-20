@@ -1,12 +1,9 @@
 pandas
-streamlit
+streamlit>=1.40.0
 streamlit_option_menu
 psycopg2-binary
-pandas
 gdown
 stripe
 numpy
 requests
-altair<5
-
 plotly

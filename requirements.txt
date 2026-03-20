@@ -6,4 +6,7 @@ pandas
 gdown
 stripe
 numpy
+requests
+altair<5
+
 plotly

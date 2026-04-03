@@ -154,6 +154,14 @@ if df is not None and not df.empty:
         if _col in df.columns:
             df[_col] = pd.to_datetime(df[_col], errors="coerce")
 
+
+def _n_ads(sdf):
+    """Count distinct ads (ad_id), not row count."""
+    if sdf is None or len(sdf) == 0:
+        return 0
+    return int(sdf["ad_id"].nunique())
+
+
 # ─── Custom CSS ───
 st.markdown("""
 <style>
@@ -354,7 +362,7 @@ with st.sidebar:
     st.markdown(
         f"<div style='text-align:center; opacity:0.5; font-size:0.8rem;'>"
         f"Data as of {today.strftime('%B %d, %Y')}<br>"
-        f"{len(df):,} total records</div>",
+        f"{_n_ads(df):,} unique ads</div>",
         unsafe_allow_html=True
     )
 
@@ -392,20 +400,20 @@ st.markdown(
 # ─── KPI Cards — Total Ads ───
 st.markdown('<div class="section-header">📈 Total Ads</div>', unsafe_allow_html=True)
 
-ads_today = len(df[df["created_at"] == today])
-ads_yesterday = len(df[df["created_at"] == yesterday])
-ads_7d = len(df[df["created_at"] >= today - timedelta(days=6)])
-ads_30d = len(df[df["created_at"] >= today - timedelta(days=29)])
-ads_current_month = len(df[(df["created_at"].dt.year == today.year) & (df["created_at"].dt.month == today.month)])
-ads_prev_month = len(df[
+ads_today = _n_ads(df[df["created_at"] == today])
+ads_yesterday = _n_ads(df[df["created_at"] == yesterday])
+ads_7d = _n_ads(df[df["created_at"] >= today - timedelta(days=6)])
+ads_30d = _n_ads(df[df["created_at"] >= today - timedelta(days=29)])
+ads_current_month = _n_ads(df[(df["created_at"].dt.year == today.year) & (df["created_at"].dt.month == today.month)])
+ads_prev_month = _n_ads(df[
     (df["created_at"].dt.year == (today - timedelta(days=today.day)).year) &
     (df["created_at"].dt.month == (today - timedelta(days=today.day)).month)
 ])
-ads_current_year = len(df[df["created_at"].dt.year == today.year])
+ads_current_year = _n_ads(df[df["created_at"].dt.year == today.year])
 
 day_before_yesterday = today - timedelta(days=2)
-ads_day_before = len(df[df["created_at"] == day_before_yesterday])
-prev_7d = len(df[(df["created_at"] >= today - timedelta(days=13)) & (df["created_at"] < today - timedelta(days=6))])
+ads_day_before = _n_ads(df[df["created_at"] == day_before_yesterday])
+prev_7d = _n_ads(df[(df["created_at"] >= today - timedelta(days=13)) & (df["created_at"] < today - timedelta(days=6))])
 
 a1, a2, a3 = st.columns(3)
 with a1:
@@ -426,22 +434,22 @@ with a6:
 st.markdown('<div class="section-header">🚫 Disapproved Ads</div>', unsafe_allow_html=True)
 
 dis = df[df["ad_status"] == "DISAPPROVED"]
-dis_today = len(dis[dis["status_change_date"] == today])
-dis_yesterday = len(dis[dis["status_change_date"] == yesterday])
-dis_7d = len(dis[dis["status_change_date"] >= today - timedelta(days=6)])
-dis_30d = len(dis[dis["status_change_date"] >= today - timedelta(days=29)])
-dis_current_month = len(dis[
+dis_today = _n_ads(dis[dis["status_change_date"] == today])
+dis_yesterday = _n_ads(dis[dis["status_change_date"] == yesterday])
+dis_7d = _n_ads(dis[dis["status_change_date"] >= today - timedelta(days=6)])
+dis_30d = _n_ads(dis[dis["status_change_date"] >= today - timedelta(days=29)])
+dis_current_month = _n_ads(dis[
     (dis["status_change_date"].dt.year == today.year) &
     (dis["status_change_date"].dt.month == today.month)
 ])
-dis_prev_month = len(dis[
+dis_prev_month = _n_ads(dis[
     (dis["status_change_date"].dt.year == (today - timedelta(days=today.day)).year) &
     (dis["status_change_date"].dt.month == (today - timedelta(days=today.day)).month)
 ])
-dis_current_year = len(dis[dis["status_change_date"].dt.year == today.year])
+dis_current_year = _n_ads(dis[dis["status_change_date"].dt.year == today.year])
 
-dis_day_before = len(dis[dis["status_change_date"] == day_before_yesterday])
-dis_prev_7d = len(dis[(dis["status_change_date"] >= today - timedelta(days=13)) & (dis["status_change_date"] < today - timedelta(days=6))])
+dis_day_before = _n_ads(dis[dis["status_change_date"] == day_before_yesterday])
+dis_prev_7d = _n_ads(dis[(dis["status_change_date"] >= today - timedelta(days=13)) & (dis["status_change_date"] < today - timedelta(days=6))])
 
 d1, d2, d3 = st.columns(3)
 with d1:
@@ -481,11 +489,16 @@ tab1, tab2, tab3, tab4, tab5 = st.tabs([
 
 # ═══ TAB 1: TRENDS ═══
 with tab1:
-    # Daily ads created vs disapproved
-    daily = df.groupby("created_at").agg(
-        total=("ad_id", "count"),
-        disapproved=("ad_status", lambda x: (x == "DISAPPROVED").sum())
-    ).reset_index()
+    # Daily unique ads created vs uniquely disapproved
+    _tot_d = df.groupby("created_at", as_index=False)["ad_id"].nunique().rename(columns={"ad_id": "total"})
+    _dis_d = (
+        df[df["ad_status"] == "DISAPPROVED"]
+        .groupby("created_at", as_index=False)["ad_id"]
+        .nunique()
+        .rename(columns={"ad_id": "disapproved"})
+    )
+    daily = _tot_d.merge(_dis_d, on="created_at", how="left").fillna({"disapproved": 0})
+    daily["disapproved"] = daily["disapproved"].astype(int)
     daily["approved"] = daily["total"] - daily["disapproved"]
     daily["rejection_rate"] = (daily["disapproved"] / daily["total"] * 100).round(2)
     
@@ -499,15 +512,15 @@ with tab1:
         fig.add_trace(go.Bar(
             x=daily_30["created_at"], y=daily_30["approved"],
             name="Approved", marker_color="#3b82f6",
-            hovertemplate="%{x|%b %d}<br>Approved: %{y:,}<extra></extra>"
+            hovertemplate="%{x|%b %d}<br>Approved (unique): %{y:,}<extra></extra>"
         ))
         fig.add_trace(go.Bar(
             x=daily_30["created_at"], y=daily_30["disapproved"],
             name="Disapproved", marker_color="#ef4444",
-            hovertemplate="%{x|%b %d}<br>Disapproved: %{y:,}<extra></extra>"
+            hovertemplate="%{x|%b %d}<br>Disapproved (unique): %{y:,}<extra></extra>"
         ))
         fig.update_layout(
-            title="Daily Ads Created (Last 30 Days)",
+            title="Daily Unique Ads Created (Last 30 Days)",
             barmode="stack",
             template="plotly_white",
             height=400,
@@ -543,15 +556,20 @@ with tab1:
     weekly = df.copy()
     weekly["week"] = weekly["created_at"].dt.isocalendar().week.astype(int)
     weekly["year_week"] = weekly["created_at"].dt.strftime("%Y-W%U")
-    weekly_agg = weekly.groupby("year_week").agg(
-        total=("ad_id", "count"),
-        disapproved=("ad_status", lambda x: (x == "DISAPPROVED").sum())
-    ).reset_index()
+    _tot_w = weekly.groupby("year_week", as_index=False)["ad_id"].nunique().rename(columns={"ad_id": "total"})
+    _dis_w = (
+        weekly[weekly["ad_status"] == "DISAPPROVED"]
+        .groupby("year_week", as_index=False)["ad_id"]
+        .nunique()
+        .rename(columns={"ad_id": "disapproved"})
+    )
+    weekly_agg = _tot_w.merge(_dis_w, on="year_week", how="left").fillna({"disapproved": 0})
+    weekly_agg["disapproved"] = weekly_agg["disapproved"].astype(int)
     weekly_agg["rejection_rate"] = (weekly_agg["disapproved"] / weekly_agg["total"] * 100).round(2)
     weekly_agg = weekly_agg.tail(12)
     
     fig3 = go.Figure()
-    fig3.add_trace(go.Bar(x=weekly_agg["year_week"], y=weekly_agg["total"], name="Total Ads", marker_color="#3b82f6"))
+    fig3.add_trace(go.Bar(x=weekly_agg["year_week"], y=weekly_agg["total"], name="Unique ads", marker_color="#3b82f6"))
     fig3.add_trace(go.Bar(x=weekly_agg["year_week"], y=weekly_agg["disapproved"], name="Disapproved", marker_color="#ef4444"))
     fig3.add_trace(go.Scatter(
         x=weekly_agg["year_week"], y=weekly_agg["rejection_rate"],
@@ -575,7 +593,12 @@ with tab1:
 with tab2:
     # Date x Ad Status pivot
     st.markdown("**Date × Ad Status**")
-    date_status = df.groupby([df["created_at"].dt.date, "ad_status"]).size().unstack(fill_value=0).reset_index()
+    date_status = (
+        df.groupby([df["created_at"].dt.date, "ad_status"])["ad_id"]
+        .nunique()
+        .unstack(fill_value=0)
+        .reset_index()
+    )
     date_status.columns = ["Date", "APPROVED", "DISAPPROVED"] if "DISAPPROVED" in date_status.columns else list(date_status.columns)
     date_status = date_status.sort_values("Date", ascending=False).head(15)
     st.dataframe(date_status, use_container_width=True, hide_index=True)
@@ -584,7 +607,12 @@ with tab2:
     
     # Top accounts by disapproval
     st.markdown("**Ad Account × Ad Status**")
-    acct_status = df.groupby(["ad_account_id", "ad_status"]).size().unstack(fill_value=0).reset_index()
+    acct_status = (
+        df.groupby(["ad_account_id", "ad_status"])["ad_id"]
+        .nunique()
+        .unstack(fill_value=0)
+        .reset_index()
+    )
     if "DISAPPROVED" in acct_status.columns:
         acct_status = acct_status.sort_values("DISAPPROVED", ascending=False).head(20)
     st.dataframe(acct_status, use_container_width=True, hide_index=True)
@@ -594,12 +622,18 @@ with tab2:
     col1, col2 = st.columns(2)
     with col1:
         # Top 10 accounts by disapproval count
-        top_dis = dis.groupby("ad_account_id").size().reset_index(name="count").sort_values("count", ascending=True).tail(10)
+        top_dis = (
+            dis.groupby("ad_account_id")["ad_id"]
+            .nunique()
+            .reset_index(name="count")
+            .sort_values("count", ascending=True)
+            .tail(10)
+        )
         fig = px.bar(
             top_dis, x="count", y="ad_account_id", orientation="h",
-            title="Top 10 Accounts by Disapproved Ads",
+            title="Top 10 Accounts by Unique Disapproved Ads",
             color_discrete_sequence=["#ef4444"],
-            labels={"count": "Disapproved Ads", "ad_account_id": "Ad Account"}
+            labels={"count": "Unique disapproved ads", "ad_account_id": "Ad Account"}
         )
         fig.update_layout(template="plotly_white", height=400, font=dict(family="DM Sans"),
                           margin=dict(l=40, r=20, t=60, b=40))
@@ -607,16 +641,21 @@ with tab2:
     
     with col2:
         # Accounts by rejection rate (min 10 ads)
-        acct_rates = df.groupby("ad_account_id").agg(
-            total=("ad_id", "count"),
-            disapproved=("ad_status", lambda x: (x == "DISAPPROVED").sum())
-        ).reset_index()
+        _t = df.groupby("ad_account_id", as_index=False)["ad_id"].nunique().rename(columns={"ad_id": "total"})
+        _d = (
+            df[df["ad_status"] == "DISAPPROVED"]
+            .groupby("ad_account_id", as_index=False)["ad_id"]
+            .nunique()
+            .rename(columns={"ad_id": "disapproved"})
+        )
+        acct_rates = _t.merge(_d, on="ad_account_id", how="left").fillna({"disapproved": 0})
+        acct_rates["disapproved"] = acct_rates["disapproved"].astype(int)
         acct_rates["rejection_rate"] = (acct_rates["disapproved"] / acct_rates["total"] * 100).round(2)
         acct_rates = acct_rates[acct_rates["total"] >= 10].sort_values("rejection_rate", ascending=True).tail(10)
         
         fig = px.bar(
             acct_rates, x="rejection_rate", y="ad_account_id", orientation="h",
-            title="Top 10 Accounts by Rejection Rate (min 10 ads)",
+            title="Top 10 Accounts by Rejection Rate (min 10 unique ads)",
             color_discrete_sequence=["#f59e0b"],
             labels={"rejection_rate": "Rejection Rate (%)", "ad_account_id": "Ad Account"}
         )
@@ -627,7 +666,11 @@ with tab2:
     # Created Date × Ad Account × Ad Status
     st.markdown("---")
     st.markdown("**Created Date × Ad Account × Ad Status (Filtered)**")
-    date_acct = filtered.groupby([filtered["created_at"].dt.date, "ad_account_id", "ad_status"]).size().reset_index(name="Count")
+    date_acct = (
+        filtered.groupby([filtered["created_at"].dt.date, "ad_account_id", "ad_status"])["ad_id"]
+        .nunique()
+        .reset_index(name="Count")
+    )
     date_acct.columns = ["created_at", "ad_account_id", "ad_status", "Count"]
     date_acct = date_acct.sort_values(["created_at", "ad_account_id"], ascending=[False, True])
     st.dataframe(date_acct.head(500), use_container_width=True, hide_index=True)
@@ -639,11 +682,14 @@ with tab3:
     
     with col1:
         # Error type distribution
-        error_dist = dis["error_type"].value_counts().reset_index()
-        error_dist.columns = ["Error Type", "Count"]
+        error_dist = (
+            dis.groupby("error_type", as_index=False)["ad_id"]
+            .nunique()
+            .rename(columns={"ad_id": "Count", "error_type": "Error Type"})
+        )
         fig = px.pie(
             error_dist, values="Count", names="Error Type",
-            title="Disapproval Reasons Distribution",
+            title="Disapproval Reasons (unique ads)",
             color_discrete_sequence=px.colors.qualitative.Set2,
             hole=0.4
         )
@@ -660,7 +706,7 @@ with tab3:
         fig = px.bar(
             error_dist.sort_values("Count", ascending=True),
             x="Count", y="Error Type", orientation="h",
-            title="Disapproval Count by Error Type",
+            title="Unique Disapproved Ads by Error Type",
             color="Count",
             color_continuous_scale=["#fca5a5", "#ef4444", "#991b1b"]
         )
@@ -673,7 +719,11 @@ with tab3:
     
     # Error type trend over time
     st.markdown("---")
-    error_daily = dis.groupby([dis["status_change_date"].dt.date, "error_type"]).size().reset_index(name="count")
+    error_daily = (
+        dis.groupby([dis["status_change_date"].dt.date, "error_type"])["ad_id"]
+        .nunique()
+        .reset_index(name="count")
+    )
     error_daily.columns = ["date", "error_type", "count"]
     error_daily = error_daily[error_daily["date"] >= (today - timedelta(days=30)).date()]
     
@@ -681,7 +731,7 @@ with tab3:
         error_daily, x="date", y="count", color="error_type",
         title="Daily Disapprovals by Error Type (Last 30 Days)",
         color_discrete_sequence=px.colors.qualitative.Set2,
-        labels={"count": "Disapproved Ads", "date": "Date", "error_type": "Error Type"}
+        labels={"count": "Unique disapproved ads", "date": "Date", "error_type": "Error Type"}
     )
     fig.update_layout(
         template="plotly_white", height=400, font=dict(family="DM Sans"),
@@ -694,13 +744,19 @@ with tab3:
     col1, col2 = st.columns(2)
     with col1:
         st.markdown("**Ad Account × Disapproved Reason × Count**")
-        acct_error = dis.groupby(["ad_account_id", "error_type"]).size().reset_index(name="Count")
+        acct_error = (
+            dis.groupby(["ad_account_id", "error_type"])["ad_id"].nunique().reset_index(name="Count")
+        )
         acct_error = acct_error.sort_values("Count", ascending=False).head(50)
         st.dataframe(acct_error, use_container_width=True, hide_index=True)
     
     with col2:
         st.markdown("**Date × Disapproved Reason × Count**")
-        date_error = dis.groupby([dis["status_change_date"].dt.date, "error_type"]).size().reset_index(name="Count")
+        date_error = (
+            dis.groupby([dis["status_change_date"].dt.date, "error_type"])["ad_id"]
+            .nunique()
+            .reset_index(name="Count")
+        )
         date_error.columns = ["Date", "Error Type", "Count"]
         date_error = date_error.sort_values(["Date", "Count"], ascending=[False, False]).head(50)
         st.dataframe(date_error, use_container_width=True, hide_index=True)
@@ -726,7 +782,7 @@ with tab3:
 
 # ═══ TAB 4: RAW DATA ═══
 with tab4:
-    st.markdown(f"**Showing {len(filtered):,} records** (filtered)")
+    st.markdown(f"**Showing {_n_ads(filtered):,} unique ads** ({len(filtered):,} rows, filtered)")
     
     col1, col2, col3 = st.columns(3)
     with col1:
@@ -777,7 +833,12 @@ with tab5:
     st.markdown("**Select an ad account to see all its records and rejection history**")
     
     # Show accounts with most disapprovals first
-    acct_options = dis.groupby("ad_account_id").size().reset_index(name="dis_count").sort_values("dis_count", ascending=False)
+    acct_options = (
+        dis.groupby("ad_account_id")["ad_id"]
+        .nunique()
+        .reset_index(name="dis_count")
+        .sort_values("dis_count", ascending=False)
+    )
     acct_list = acct_options["ad_account_id"].tolist()
     
     selected_account = st.selectbox("Ad Account", acct_list, index=0)
@@ -787,15 +848,22 @@ with tab5:
         acct_dis = acct_data[acct_data["ad_status"] == "DISAPPROVED"]
         
         c1, c2, c3, c4 = st.columns(4)
-        c1.metric("Total Ads", f"{len(acct_data):,}")
-        c2.metric("Disapproved", f"{len(acct_dis):,}")
-        c3.metric("Rejection Rate", f"{len(acct_dis)/len(acct_data)*100:.1f}%")
+        _acct_n = _n_ads(acct_data)
+        _acct_dis_n = _n_ads(acct_dis)
+        c1.metric("Total Ads (unique)", f"{_acct_n:,}")
+        c2.metric("Disapproved (unique)", f"{_acct_dis_n:,}")
+        c3.metric("Rejection Rate", f"{_acct_dis_n/_acct_n*100:.1f}%" if _acct_n > 0 else "0.0%")
         c4.metric("BUID", acct_data["buid"].iloc[0])
         
         col1, col2 = st.columns(2)
         with col1:
             # Daily trend for this account
-            acct_daily = acct_data.groupby([acct_data["created_at"].dt.date, "ad_status"]).size().unstack(fill_value=0).reset_index()
+            acct_daily = (
+                acct_data.groupby([acct_data["created_at"].dt.date, "ad_status"])["ad_id"]
+                .nunique()
+                .unstack(fill_value=0)
+                .reset_index()
+            )
             acct_daily.columns.name = None
             fig = go.Figure()
             if "APPROVED" in acct_daily.columns:
@@ -812,8 +880,11 @@ with tab5:
         
         with col2:
             if len(acct_dis) > 0:
-                error_breakdown = acct_dis["error_type"].value_counts().reset_index()
-                error_breakdown.columns = ["Error Type", "Count"]
+                error_breakdown = (
+                    acct_dis.groupby("error_type", as_index=False)["ad_id"]
+                    .nunique()
+                    .rename(columns={"ad_id": "Count", "error_type": "Error Type"})
+                )
                 fig = px.pie(error_breakdown, values="Count", names="Error Type",
                              title="Rejection Reasons for this Account",
                              color_discrete_sequence=px.colors.qualitative.Pastel, hole=0.35)

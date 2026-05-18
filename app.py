@@ -21,6 +21,14 @@ def _spend_to_usd_numpy(spend_series, currency_series, conversion_rates: dict, u
     return numpy.where(is_usd, spend, numpy.where(rates.notna(), spend * rates, spend))
 
 
+def _parse_euid_csv(text: str) -> list[int]:
+    """Parse comma-separated EUIDs; ignores empty segments and strips whitespace."""
+    parts = [p.strip() for p in text.split(",") if p.strip()]
+    if not parts:
+        raise ValueError("Enter at least one EUID.")
+    return [int(p) for p in parts]
+
+
 # Read credentials directly from Streamlit secrets
 db = st.secrets["db"]
 name = st.secrets["name"]
@@ -853,29 +861,43 @@ if selected == "Key Account Stats" and st.session_state.status == "verified":
     st.title("Key Account Stats")
     st.write("Show detailed spends of top customers.")
 
-    col1,col2 = st.columns(2)
+    col1, col2 = st.columns(2)
 
     with col1:
-    # Step 1: Ask the customer to choose a top_customers_flag
-        flag_options = df['top_customers_flag'].unique()
-        selected_flag = st.selectbox('Choose Top Customers Flag', flag_options, index=1)
+        flag_options = sorted(df['top_customers_flag'].unique().tolist())
+        default_flag_index = flag_options.index("Roposo") if "Roposo" in flag_options else 0
+        selected_flag = st.selectbox('Choose Top Customers Flag', flag_options, index=default_flag_index)
+
+        others_ready = True
         if selected_flag == "Others":
-            euids = st.text_input("Enter euids (comma separated):",value = "744")
-            euids = [int(x) for x in euids.split(",")]
-            
+            euid_input = st.text_input("Enter euids (comma separated):", value="744", key="kas_euid_input")
+            if st.button("Apply EUID Filter", type="primary", key="kas_apply_euid"):
+                try:
+                    st.session_state.kas_applied_euids = _parse_euid_csv(euid_input)
+                except ValueError as exc:
+                    st.error(str(exc))
+            if "kas_applied_euids" not in st.session_state:
+                others_ready = False
+                st.info("Enter EUIDs and click **Apply EUID Filter** to load stats.")
+        else:
+            st.session_state.pop("kas_applied_euids", None)
 
     with col2:
-
-        # Step 2: Ask the customer to choose grouping (year, quarter, month, week, or date)
         grouping = st.selectbox('Choose Grouping', ['Year', 'Quarter', 'Month', 'Week', 'Date'], index=4)
 
-    kajs_df = df.merge(disabled_account_df[['ad_account_id', 'flag']], on='ad_account_id', how='left')
+    if selected_flag == "Others" and not others_ready:
+        st.stop()
 
+    kajs_df = df.merge(disabled_account_df[['ad_account_id', 'flag']], on='ad_account_id', how='left')
     kajs_df['flag'] = kajs_df['flag'].fillna('Active')
 
-    # Filter the dataframe based on the selected top_customers_flag
     if selected_flag == "Others":
-        filtered_df = kajs_df[kajs_df['euid'].isin(euids)]
+        applied_euids = st.session_state.kas_applied_euids
+        euid_series = pd.to_numeric(kajs_df['euid'], errors='coerce')
+        filtered_df = kajs_df[euid_series.isin(applied_euids)]
+        if filtered_df.empty:
+            st.warning(f"No spend data found for EUID(s): {', '.join(map(str, applied_euids))}")
+            st.stop()
     else:
         filtered_df = kajs_df[kajs_df['top_customers_flag'] == selected_flag]
 

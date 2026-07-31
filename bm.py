@@ -138,10 +138,6 @@ last_month = date.today().replace(day=1) - timedelta(days=1)
 current_month = datetime.now().month
 current_year = datetime.now().year
 
-#Removing today's data
-df = df[df['dt'] != date.today()]
-
-
 st.title("Meta Spend Summary")
 
 
@@ -251,7 +247,7 @@ top10_ind = ind_df[ind_df['dt'] == yesterday].sort_values('spend', ascending=Fal
 col_ind.write("IND BM")
 col_ind.dataframe(
     top10_ind[['euid','ad_account_id', 'ad_account_name', 'spend']].rename(columns={'spend': 'Spend (INR)'}),
-    use_container_width=True,
+    width='stretch',
     hide_index=True
 )
 
@@ -260,6 +256,6 @@ top10_us = us_df[us_df['dt'] == yesterday].sort_values('spend_in_usd', ascending
 col_us.write("US BM")
 col_us.dataframe(
     top10_us[['euid','ad_account_id', 'ad_account_name','spend_in_usd']].rename(columns={'spend_in_usd': 'Spend (USD)'}),
-    use_container_width=True,
+    width='stretch',
     hide_index=True
 )

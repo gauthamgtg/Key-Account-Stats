@@ -264,9 +264,6 @@ last_month = date.today().replace(day=1) - timedelta(days=1)
 current_month = datetime.now().month
 current_year = datetime.now().year
 
-#Removing today's data
-df = df[df['dt'] != date.today()]
-
 #datong df
 # datong_api_df['dt'] = pd.to_datetime(datong_api_df['dt']).dt.date
 # datong_api_df['spend'] = pd.to_numeric(datong_api_df['spend'], errors='coerce')
@@ -490,6 +487,6 @@ elif selected == "Ad account stats" and st.session_state.status == "verified":
                     "Objective": objectives,
                     "Targeting": targeting
                 })
-            st.dataframe(pd.DataFrame(results), use_container_width=True)
+            st.dataframe(pd.DataFrame(results), width='stretch')
     else:
         st.info("No ad account IDs found in the sheet.")

@@ -528,7 +528,7 @@ with tab1:
             legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
             margin=dict(l=40, r=20, t=60, b=40)
         )
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width='stretch')
     
     with col2:
         fig2 = go.Figure()
@@ -550,7 +550,7 @@ with tab1:
             font=dict(family="DM Sans"),
             margin=dict(l=40, r=20, t=60, b=40)
         )
-        st.plotly_chart(fig2, use_container_width=True)
+        st.plotly_chart(fig2, width='stretch')
     
     # Weekly trend
     weekly = df.copy()
@@ -586,7 +586,7 @@ with tab1:
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
         margin=dict(l=40, r=60, t=60, b=40)
     )
-    st.plotly_chart(fig3, use_container_width=True)
+    st.plotly_chart(fig3, width='stretch')
 
 
 # ═══ TAB 2: AD ACCOUNTS ═══
@@ -601,7 +601,7 @@ with tab2:
     )
     date_status.columns = ["Date", "APPROVED", "DISAPPROVED"] if "DISAPPROVED" in date_status.columns else list(date_status.columns)
     date_status = date_status.sort_values("Date", ascending=False).head(15)
-    st.dataframe(date_status, use_container_width=True, hide_index=True)
+    st.dataframe(date_status, width='stretch', hide_index=True)
     
     st.markdown("---")
     
@@ -615,7 +615,7 @@ with tab2:
     )
     if "DISAPPROVED" in acct_status.columns:
         acct_status = acct_status.sort_values("DISAPPROVED", ascending=False).head(20)
-    st.dataframe(acct_status, use_container_width=True, hide_index=True)
+    st.dataframe(acct_status, width='stretch', hide_index=True)
     
     st.markdown("---")
     
@@ -637,7 +637,7 @@ with tab2:
         )
         fig.update_layout(template="plotly_white", height=400, font=dict(family="DM Sans"),
                           margin=dict(l=40, r=20, t=60, b=40))
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width='stretch')
     
     with col2:
         # Accounts by rejection rate (min 10 ads)
@@ -661,7 +661,7 @@ with tab2:
         )
         fig.update_layout(template="plotly_white", height=400, font=dict(family="DM Sans"),
                           margin=dict(l=40, r=20, t=60, b=40))
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width='stretch')
     
     # Created Date × Ad Account × Ad Status
     st.markdown("---")
@@ -673,7 +673,7 @@ with tab2:
     )
     date_acct.columns = ["created_at", "ad_account_id", "ad_status", "Count"]
     date_acct = date_acct.sort_values(["created_at", "ad_account_id"], ascending=[False, True])
-    st.dataframe(date_acct.head(500), use_container_width=True, hide_index=True)
+    st.dataframe(date_acct.head(500), width='stretch', hide_index=True)
 
 
 # ═══ TAB 3: ERROR ANALYSIS ═══
@@ -699,7 +699,7 @@ with tab3:
             legend=dict(font=dict(size=10))
         )
         fig.update_traces(textposition="inside", textinfo="percent+label", textfont_size=10)
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width='stretch')
     
     with col2:
         # Error type bar chart
@@ -715,7 +715,7 @@ with tab3:
             margin=dict(l=40, r=20, t=60, b=40), showlegend=False,
             coloraxis_showscale=False
         )
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width='stretch')
     
     # Error type trend over time
     st.markdown("---")
@@ -738,7 +738,7 @@ with tab3:
         legend=dict(orientation="h", yanchor="bottom", y=-0.4, font=dict(size=9)),
         margin=dict(l=40, r=20, t=60, b=40)
     )
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width='stretch')
     
     # Error type by ad account (heatmap)
     col1, col2 = st.columns(2)
@@ -748,7 +748,7 @@ with tab3:
             dis.groupby(["ad_account_id", "error_type"])["ad_id"].nunique().reset_index(name="Count")
         )
         acct_error = acct_error.sort_values("Count", ascending=False).head(50)
-        st.dataframe(acct_error, use_container_width=True, hide_index=True)
+        st.dataframe(acct_error, width='stretch', hide_index=True)
     
     with col2:
         st.markdown("**Date × Disapproved Reason × Count**")
@@ -759,7 +759,7 @@ with tab3:
         )
         date_error.columns = ["Date", "Error Type", "Count"]
         date_error = date_error.sort_values(["Date", "Count"], ascending=[False, False]).head(50)
-        st.dataframe(date_error, use_container_width=True, hide_index=True)
+        st.dataframe(date_error, width='stretch', hide_index=True)
     
     # Time to disapproval
     st.markdown("---")
@@ -777,7 +777,7 @@ with tab3:
         template="plotly_white", height=350, font=dict(family="DM Sans"),
         margin=dict(l=40, r=20, t=60, b=40)
     )
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width='stretch')
 
 
 # ═══ TAB 4: RAW DATA ═══
@@ -808,7 +808,7 @@ with tab4:
     
     st.dataframe(
         display_df.head(2000),
-        use_container_width=True,
+        width='stretch',
         hide_index=True,
         column_config={
             "created_at": st.column_config.DateColumn("Created At", format="MMM DD, YYYY"),
@@ -876,7 +876,7 @@ with tab5:
                 font=dict(family="DM Sans"),
                 margin=dict(l=40, r=20, t=60, b=40)
             )
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width='stretch')
         
         with col2:
             if len(acct_dis) > 0:
@@ -890,14 +890,14 @@ with tab5:
                              color_discrete_sequence=px.colors.qualitative.Pastel, hole=0.35)
                 fig.update_layout(template="plotly_white", height=350, font=dict(family="DM Sans"),
                                   margin=dict(l=20, r=20, t=60, b=20))
-                st.plotly_chart(fig, use_container_width=True)
+                st.plotly_chart(fig, width='stretch')
             else:
                 st.info("No disapprovals for this account")
         
         st.markdown("**All Records**")
         st.dataframe(
             acct_data.sort_values("created_at", ascending=False),
-            use_container_width=True,
+            width='stretch',
             hide_index=True,
             column_config={
                 "created_at": st.column_config.DateColumn("Created At", format="MMM DD, YYYY"),

@@ -219,7 +219,9 @@ def get_main_spend_enriched() -> pd.DataFrame:
     df["dt"] = pd.to_datetime(df["dt"]).dt.date
     df["spend"] = pd.to_numeric(df["spend"], errors="coerce")
     df["spend"] = df["spend"].map(int)
-    df["euid"] = pd.to_numeric(df["euid"], errors="coerce")
+    # Fill euid before the blanket fillna below, so it stays an int column
+    # instead of a str/float mix that Arrow can't serialize.
+    df["euid"] = pd.to_numeric(df["euid"], errors="coerce").fillna(0).astype(int)
     df = df.fillna("Unknown")
 
     df = df.sort_values(by="spend", ascending=False)
@@ -274,42 +276,77 @@ def _load_runtime_views(selected_page: str) -> dict:
     return blob
 
 query = '''
-with spends AS
-    (SELECT  ad_account_id,date(date_start) as dt,max(spend)spend
-    from 
-    (
-    select ad_account_id,date(date_start) as date_start,spend from ad_account_spends 
-    union ALL
-    select ad_account_id,date(date_start) as date_start,spend from zocket_global.ad_account_spends
-    )aas
-	group by 1,2
-    ),
-    total_payment AS
-        (select ad_account,sum(adspend_amount) total_paid 
-        from payment_trans_details td
-        group by 1)
+with spends as (
+    select ad_account_id,
+           date(date_start) as dt,
+           max(spend) as spend
+    from (
+        select ad_account_id, date(date_start) as date_start, spend
+        from ad_account_spends
+        union all
+        select ad_account_id, date(date_start) as date_start, spend
+        from zocket_global.ad_account_spends
+    ) aas
+    group by 1,2
+),
+total_payment as (
+    select ad_account, sum(adspend_amount) as total_paid
+    from payment_trans_details td
+    group by 1
+),
 
-select coalesce(cast(bp.buid as int),c.app_business_id) as euid,coalesce(eu.business_name,bp.name) as business_name,coalesce(eu.company_name,bp.brand_name) as company_name,dt,coalesce(b.name,d.name) as ad_account_name,
-coalesce(c.name,e.name) as business_manager_name,coalesce(c.business_manager_id,e.business_manager_id) as business_manager_id,
-case when a.ad_account_id ='act_1090921776002942' then 'INR' else COALESCE(b.currency,d.currency) end as currency_code,a.ad_account_id,spend
-from 
-    spends a
-    left join ( select ad_account_id,name,currency,max(app_business_manager_id)app_business_manager_id
-    from fb_ad_accounts 
-    group by 1,2,3 )b on a.ad_account_id = b.ad_account_id
-    left join fb_business_managers c on c.id = b.app_business_manager_id
-    left join enterprise_users eu on eu.euid=c.app_business_id
-    left join zocket_global.fb_child_ad_accounts d on a.ad_account_id = d.ad_account_id
-    left join zocket_global.fb_child_business_managers e on e.id = d.app_business_manager_id
-    left join 
-    (SELECT
-    id ,name,brand_name,json_extract_path_text(json_extract_array_element_text(business_user_ids, 0), 'role') AS role,
-    json_extract_path_text(json_extract_array_element_text(business_user_ids, 0), 'business_user_id') AS buid
-FROM
-    zocket_global.business_profile
-WHERE
-    json_extract_path_text(json_extract_array_element_text(business_user_ids, 0), 'role') = 'owner' )bp on e.app_business_id=bp.id
-    order by euid,dt desc
+joined as (
+    select
+        coalesce(cast(bp.buid as int), c.app_business_id)      as euid,
+        coalesce(eu.business_name, bp.name)                    as business_name,
+        coalesce(eu.company_name, bp.brand_name)               as company_name,
+        a.dt,
+        coalesce(b.name, d.name)                               as ad_account_name,
+        coalesce(c.name, e.name)                               as business_manager_name,
+        coalesce(c.business_manager_id, e.business_manager_id) as business_manager_id,
+        case when a.ad_account_id = 'act_1090921776002942' then 'INR'
+             else coalesce(b.currency, d.currency) end         as currency_code,
+        a.ad_account_id,
+        a.spend,
+        row_number() over (
+            partition by a.ad_account_id, a.dt
+            order by nvl(d.created_at, '1900-01-01'::timestamp) desc,
+                     nvl(b.created_at, '1900-01-01'::timestamp) desc
+        ) as rn
+    from spends a
+    left join (
+        select ad_account_id, name, currency, app_business_manager_id, created_at
+        from fb_ad_accounts
+    ) b
+        on a.ad_account_id = b.ad_account_id
+       and a.dt >= b.created_at
+    left join fb_business_managers c
+        on c.id = b.app_business_manager_id
+    left join enterprise_users eu
+        on eu.euid = c.app_business_id
+    left join zocket_global.fb_child_ad_accounts d
+        on a.ad_account_id = d.ad_account_id
+       and a.dt >= d.created_at
+    left join zocket_global.fb_child_business_managers e
+        on e.id = d.app_business_manager_id
+    left join (
+        select id,
+               name,
+               brand_name,
+               json_extract_path_text(json_extract_array_element_text(business_user_ids, 0), 'role') as role,
+               json_extract_path_text(json_extract_array_element_text(business_user_ids, 0), 'business_user_id') as buid
+        from zocket_global.business_profile
+        where json_extract_path_text(json_extract_array_element_text(business_user_ids, 0), 'role') = 'owner'
+    ) bp
+        on e.app_business_id = bp.id
+)
+
+select euid, business_name, company_name, dt, ad_account_name,
+       business_manager_name, business_manager_id, currency_code,
+       ad_account_id, spend
+from joined
+where rn = 1
+order by ad_account_id, dt desc;
     '''
 
 # sub_query = '''
@@ -856,7 +893,7 @@ if selected == "Key Account Stats" and st.session_state.status == "verified":
 
     # ad_acc = st.text_input("Enter ad acc :")
 
-    # st.dataframe(df[df['ad_account_id'] == ad_acc], use_container_width=True)
+    # st.dataframe(df[df['ad_account_id'] == ad_acc], width='stretch')
 
     st.title("Key Account Stats")
     st.write("Show detailed spends of top customers.")
@@ -907,7 +944,7 @@ if selected == "Key Account Stats" and st.session_state.status == "verified":
     filtered_df['dt'] = _fdt
     filtered_df['dt_date'] = _fdt.dt.date
 
-    # st.dataframe(filtered_df, use_container_width=True)
+    # st.dataframe(filtered_df, width='stretch')
 
     col1, col2, col3 = st.columns(3)
     col1.metric("Total Spend",filtered_df['spend'].sum().round().astype(int))
@@ -979,7 +1016,7 @@ if selected == "Key Account Stats" and st.session_state.status == "verified":
     else:  # Date
         pivot_df = pivot_df[sorted(pivot_df.columns, key=lambda x: pd.to_datetime(x), reverse=True)]
 
-    st.dataframe(pivot_df, use_container_width=True)
+    st.dataframe(pivot_df, width='stretch')
 
 
     yst_stats_df = filtered_df[filtered_df['dt_date'] == yesterday].groupby(['euid','ad_account_id','ad_account_name','business_manager_name','flag','Media_Buyer'], as_index=False)['spend'].sum().sort_values(by='spend', ascending=False).reset_index(drop=True)
@@ -990,26 +1027,26 @@ if selected == "Key Account Stats" and st.session_state.status == "verified":
     Overall_spend.index +=1
     
     st.write("Yesterday spend data:")
-    st.dataframe(yst_stats_df, use_container_width=True)
+    st.dataframe(yst_stats_df, width='stretch')
     
     st.write("Current Month spend data:")
-    st.dataframe(current_month_stats_df, use_container_width=True)
+    st.dataframe(current_month_stats_df, width='stretch')
 
     st.write("Overall spend data:")
-    st.dataframe(Overall_spend, use_container_width=True)
+    st.dataframe(Overall_spend, width='stretch')
 
     summary_df = filtered_df.copy()
     summary_df['month'] = summary_df['dt'].dt.strftime('%b-%y')
-    # st.dataframe(summary_df, use_container_width=True)
+    # st.dataframe(summary_df, width='stretch')
     summary_df = summary_df.merge(yst_stats_df, on=['euid','ad_account_id'], how='left', suffixes=('', '_yesterday'))
     summary_df = summary_df.fillna(0)
-    # st.dataframe(summary_df, use_container_width=True)
+    # st.dataframe(summary_df, width='stretch')
     summary_df = summary_df.merge(current_month_stats_df, on=['euid','ad_account_id'], how='left', suffixes=('', '_curr_month'))
     summary_df = summary_df.fillna(0)
     summary_df = summary_df.merge(Overall_spend, on=['euid','ad_account_id'], how='left', suffixes=('', '_total'))
     summary_df = summary_df.fillna(0)
     # print(summary_df.columns)
-    # st.dataframe(summary_df, use_container_width=True)
+    # st.dataframe(summary_df, width='stretch')
     summary_df = summary_df.groupby(['euid','ad_account_id','business_name','company_name','flag','Media_Buyer','month','spend_yesterday','spend_curr_month','spend_total'])['spend'].sum().reset_index()
     summary_df = summary_df.pivot(index=['euid','ad_account_id','business_name','company_name','flag','Media_Buyer','spend_total','spend_curr_month','spend_yesterday'], columns='month', values='spend')
 
@@ -1018,20 +1055,20 @@ if selected == "Key Account Stats" and st.session_state.status == "verified":
     summary_df = summary_df[sorted(summary_df.columns, key=lambda x: pd.to_datetime(x, format='%b-%y'), reverse=True)]
 
     st.title("Spend Data Ad Account Level")
-    st.dataframe(summary_df, use_container_width=True)
+    st.dataframe(summary_df, width='stretch')
 
     st.header(f"Euid Level {grouping} Data")
-    st.dataframe(filtered_df.groupby(['euid'])['spend'].sum(), use_container_width=True)
+    st.dataframe(filtered_df.groupby(['euid'])['spend'].sum(), width='stretch')
 
     #display overall data
     st.header(f"Overall {grouping} Data")
-    st.dataframe(filtered_df.groupby(['grouped_date'])['spend'].sum(), use_container_width=True)
+    st.dataframe(filtered_df.groupby(['grouped_date'])['spend'].sum(), width='stretch')
 
 elif selected == "Overall Stats - Ind" and st.session_state.status == "verified":
 
     st.title("Overall Stats - India")
 
-    indian_df = df[df['currency_code'].str.lower() == 'inr']
+    indian_df = df[df['currency_code'].str.lower() == 'inr'].copy()
 
     # indian_df['dt'] = pd.to_datetime(indian_df['dt'])
     
@@ -1099,12 +1136,12 @@ elif selected == "Overall Stats - Ind" and st.session_state.status == "verified"
             columns='dt', 
             values='spend'
         ).sort_index(axis=1, ascending=False), 
-        use_container_width=True
+        width='stretch'
     )
 
 
     st.write("Yesterday spend data:")
-    st.dataframe(ind_yesterday_data[['euid','ad_account_id','ad_account_name','currency_code','business_name','company_name','spend','dt']].sort_values(by='spend', ascending=False).reset_index(drop=True), use_container_width=True)
+    st.dataframe(ind_yesterday_data[['euid','ad_account_id','ad_account_name','currency_code','business_name','company_name','spend','dt']].sort_values(by='spend', ascending=False).reset_index(drop=True), width='stretch')
 
     st.write("Current Month spend data:")
     ind_grouped_data_adacclevel = ind_current_month_df.groupby([pd.to_datetime(ind_current_month_df['dt']).dt.strftime('%b %y'), 'euid','ad_account_id','ad_account_name','currency_code','business_name','company_name'])['spend'].sum().reset_index(name='spend').sort_values(by='spend', ascending=False).reset_index(drop=True)
@@ -1113,20 +1150,19 @@ elif selected == "Overall Stats - Ind" and st.session_state.status == "verified"
 
     # #Dataframe grouped by month and year of dt
     # ind_grouped_data_adacclevel = indian_df[indian_df['dt'].dt.month == current_month].groupby([pd.to_datetime(indian_df['dt']).dt.strftime('%b %y'), 'euid'])['spend'].sum().reset_index(name='spend').sort_values(by='spend', ascending=False)
-    st.dataframe(ind_grouped_data_adacclevel, use_container_width=True)
+    st.dataframe(ind_grouped_data_adacclevel, width='stretch')
 
     st.write("Last Month spend data:")
     ind_grouped_data_adacclevel = ind_last_month_df.groupby([pd.to_datetime(ind_last_month_df['dt']).dt.strftime('%b %y'), 'euid','ad_account_id','ad_account_name','currency_code','business_name','company_name'])['spend'].sum().reset_index(name='spend').sort_values(by='spend', ascending=False).reset_index(drop=True)
     ind_grouped_data_adacclevel.index += 1
-    st.dataframe(ind_grouped_data_adacclevel, use_container_width=True)
+    st.dataframe(ind_grouped_data_adacclevel, width='stretch')
 
     # Get top 10 overall spending ad accounts
     top_spending_ad_accounts = indian_df.groupby(['ad_account_id', 'ad_account_name'])['spend'].sum().reset_index(name='total_spend').sort_values(by='total_spend', ascending=False).head(10)
 
     st.write("Top 10 Overall Spending Ad Accounts:")
-    st.dataframe(top_spending_ad_accounts, use_container_width=True)
+    st.dataframe(top_spending_ad_accounts, width='stretch')
 
-    indian_df['euid'].replace('Unknown', 0, inplace=True)
     # Group by
     grouping = st.selectbox("Group by", ["Year", "Quarter", "Month", "Date"])
 
@@ -1163,22 +1199,22 @@ elif selected == "Overall Stats - Ind" and st.session_state.status == "verified"
     st.write(f"Spend Data Grouped by {grouping}:")
     grouped_df.index += 1
     grouped_df = grouped_df.sort_values(by='dt', ascending=False)
-    # st.dataframe(grouped_df, use_container_width=True)
+    # st.dataframe(grouped_df, width='stretch')
     pivot_df = grouped_df.pivot(index=['euid','ad_account_name','ad_account_id','currency_code'], columns='dt', values='spend')
     pivot_df = pivot_df.reindex(sorted(pivot_df.columns, reverse=True), axis=1)
-    st.dataframe(pivot_df, use_container_width=True)
+    st.dataframe(pivot_df, width='stretch')
 
 
 elif selected == "Overall Stats - US" and st.session_state.status == "verified":
 
     st.title("Overall Stats - US")
 
-    us_df = df[df['currency_code'].str.lower() != 'inr']
+    us_df = df[df['currency_code'].str.lower() != 'inr'].copy()
     # ai_spends_df = ai_spends_df[ai_spends_df['currency_code'].str.lower() != 'inr']
 
     # us_df = us_df[['euid', 'ad_account_name',  'ad_account_id','currency_code', 'dt','spend']]
 
-    # st.dataframe(us_df, use_container_width=True)
+    # st.dataframe(us_df, width='stretch')
 
     # # business_id,account_name,cs.ad_account_id,currency,date(date_start)dt,sum(spend)spend
 
@@ -1193,7 +1229,7 @@ elif selected == "Overall Stats - US" and st.session_state.status == "verified":
     us_df['spend'] = us_df['spend'].fillna(0)
     us_df = us_df.fillna("Unknown")
 
-    # st.dataframe(us_df, use_container_width=True)
+    # st.dataframe(us_df, width='stretch')
 
     # Identify unique currency codes other than 'USD'
     non_usd_currencies = us_df['currency_code'].unique()
@@ -1277,7 +1313,7 @@ elif selected == "Overall Stats - US" and st.session_state.status == "verified":
     col4.metric("Last Month Spend", f"${us_last_month_spend:,.2f}")
 
     st.write("Yesterday spend data:")
-    st.dataframe(us_df[us_df['dt']==yesterday].sort_values(by='spend_in_usd', ascending=False).reset_index(drop=True), use_container_width=True)
+    st.dataframe(us_df[us_df['dt']==yesterday].sort_values(by='spend_in_usd', ascending=False).reset_index(drop=True), width='stretch')
     
     st.write("Current Month spend data:")
     us_grouped_data_adacclevel = us_current_month_df.groupby(
@@ -1287,12 +1323,12 @@ elif selected == "Overall Stats - US" and st.session_state.status == "verified":
         avg_spend_last_30_days=('spend_in_usd', lambda x: x[-30:].mean())
     ).sort_values(by='total_spend_in_usd', ascending=False).reset_index()
     us_grouped_data_adacclevel.index += 1
-    st.dataframe(us_grouped_data_adacclevel, use_container_width=True)
+    st.dataframe(us_grouped_data_adacclevel, width='stretch')
 
     st.write("Last month spend data:")
     us_grouped_data_adacclevel = us_last_month_df.groupby([pd.to_datetime(us_last_month_df['dt']).dt.strftime('%b %y'), 'euid', 'ad_account_id', 'ad_account_name', 'currency_code'])[[ 'spend','spend_in_usd']].sum().sort_values(by='spend_in_usd', ascending=False).reset_index()
     us_grouped_data_adacclevel.index += 1
-    st.dataframe(us_grouped_data_adacclevel, use_container_width=True)
+    st.dataframe(us_grouped_data_adacclevel, width='stretch')
 
     #top 10 spenders
     st.write("Top 10 spenders:")
@@ -1304,7 +1340,7 @@ elif selected == "Overall Stats - US" and st.session_state.status == "verified":
         .head(10)
     )
 
-    st.dataframe(top_spenders, use_container_width=True)
+    st.dataframe(top_spenders, width='stretch')
 
     # Group by
     grouping = st.selectbox("Group by", ["Year", "Quarter", "Month", "Date"])
@@ -1337,17 +1373,11 @@ elif selected == "Overall Stats - US" and st.session_state.status == "verified":
     st.write(f"Spend Data Grouped by {grouping}:")
     grouped_df.index += 1
     grouped_df = grouped_df.sort_values(by='dt', ascending=False)
-    # Replace 'Unknown' in 'euid' with 0 and ensure numeric type
-    grouped_df['euid'] = grouped_df['euid'].replace('Unknown', 0)
-    grouped_df['euid'] = pd.to_numeric(grouped_df['euid'], errors='coerce').fillna(0).astype(int)
     pivot_df = grouped_df.pivot(index=['euid','ad_account_name','ad_account_id','currency_code'], columns='dt', values='spend_in_usd')
     pivot_df = pivot_df.reindex(sorted(pivot_df.columns, reverse=True), axis=1)
     
     # Calculate current month spend for each account and add to pivot table
-    us_current_month_df_copy = us_current_month_df.copy()
-    us_current_month_df_copy['euid'] = us_current_month_df_copy['euid'].replace('Unknown', 0)
-    us_current_month_df_copy['euid'] = pd.to_numeric(us_current_month_df_copy['euid'], errors='coerce').fillna(0).astype(int)
-    current_month_spend_by_account = us_current_month_df_copy.groupby(['euid','ad_account_name','ad_account_id','currency_code'])['spend_in_usd'].sum().reset_index()
+    current_month_spend_by_account = us_current_month_df.groupby(['euid','ad_account_name','ad_account_id','currency_code'])['spend_in_usd'].sum().reset_index()
     current_month_spend_by_account = current_month_spend_by_account.set_index(['euid','ad_account_name','ad_account_id','currency_code'])
     pivot_df['Current Month Spend'] = current_month_spend_by_account['spend_in_usd']
     pivot_df['Current Month Spend'] = pivot_df['Current Month Spend'].fillna(0)
@@ -1356,7 +1386,7 @@ elif selected == "Overall Stats - US" and st.session_state.status == "verified":
     cols = ['Current Month Spend'] + [col for col in pivot_df.columns if col != 'Current Month Spend']
     pivot_df = pivot_df[cols]
     
-    st.dataframe(pivot_df, use_container_width=True)
+    st.dataframe(pivot_df, width='stretch')
 
 
 
@@ -1433,7 +1463,7 @@ elif selected == "Overall Stats - US" and st.session_state.status == "verified":
 
 elif selected == "Euid - adaccount mapping" and st.session_state.status == "verified":
     st.title("Euid - adaccount mapping")
-    st.dataframe(list_df, use_container_width=True)
+    st.dataframe(list_df, width='stretch')
 
     euid = st.text_input("Type an euid or a list of euids separated by comma").strip()
     if euid:
@@ -1454,7 +1484,7 @@ elif selected == "Euid - adaccount mapping" and st.session_state.status == "veri
     else:
         filtered_list_df = pd.DataFrame()  # Empty DataFrame
 
-    st.dataframe(filtered_list_df, use_container_width=True)
+    st.dataframe(filtered_list_df, width='stretch')
     ad_account_ids = st.text_input("Type ad account ids (comma separated)").strip()
 
     if ad_account_ids:
@@ -1462,7 +1492,7 @@ elif selected == "Euid - adaccount mapping" and st.session_state.status == "veri
         filtered_list_df = list_df[list_df['ad_account_id'].isin(ad_account_ids_list)]
     else:
         filtered_list_df = pd.DataFrame()  # Empty DataFrame if no input
-    st.dataframe(filtered_list_df, use_container_width=True)
+    st.dataframe(filtered_list_df, width='stretch')
 
 elif selected == "Top accounts" and st.session_state.status == "verified":
 
@@ -1618,7 +1648,7 @@ elif selected == "Top accounts" and st.session_state.status == "verified":
         st.write(f"Showing data from {meta.get('start_label')} to {meta.get('end_label')}")
         display_df = st.session_state.top_accounts_result.copy()
         display_df.index += 1
-        st.dataframe(display_df, use_container_width=True)
+        st.dataframe(display_df, width='stretch')
     elif not apply_filter:
         st.info("Configure filters above and click **Apply Filter** to load top accounts.")
 
@@ -1686,11 +1716,11 @@ elif selected == "Top accounts" and st.session_state.status == "verified":
 #     st.header(f"Spend Data - {grouping} View")
 
 #     pivoted_df = grouped_df.pivot(index=['ad_account_name','ad_account_id','currency_code','name'], columns='grouped_date', values='spend')
-#     st.dataframe(pivoted_df, use_container_width=True)
+#     st.dataframe(pivoted_df, width='stretch')
 
 #     # Display full table
 #     st.header("Full Table")
-#     st.dataframe(ai_spends_df, use_container_width=True)
+#     st.dataframe(ai_spends_df, width='stretch')
 
 
 elif selected == "FB API Campaign spends" and st.session_state.status == "verified":
@@ -1880,7 +1910,7 @@ elif selected == "FB API Campaign spends" and st.session_state.status == "verifi
     st.header(f"Spend Data Ad Account Level- {grouping}")
     pivot_df = grouped_df.pivot(index=['buid','email','account_name','ad_account_id','currency'], columns='grouped_date', values='spend')
 
-    # st.dataframe(grouped_df, use_container_width=True)
+    # st.dataframe(grouped_df, width='stretch')
 
     # Sort the columns by date in descending order
     if grouping == 'Year':
@@ -1895,7 +1925,7 @@ elif selected == "FB API Campaign spends" and st.session_state.status == "verifi
         pivot_df = pivot_df[sorted(pivot_df.columns, key=lambda x: pd.to_datetime(x), reverse=True)]
 
 
-    st.dataframe(pivot_df, use_container_width=True)
+    st.dataframe(pivot_df, width='stretch')
    
     # Display grouped data
     st.header(f"Spend Data Ad Account Level - {grouping} USD View")
@@ -1914,8 +1944,8 @@ elif selected == "FB API Campaign spends" and st.session_state.status == "verifi
     else:  # Date
         pivot_df = pivot_df[sorted(pivot_df.columns, key=lambda x: pd.to_datetime(x), reverse=True)]
 
-    # st.dataframe(grouped_df, use_container_width=True)
-    st.dataframe(pivot_df.style.format("{:.2f}"), use_container_width=True)
+    # st.dataframe(grouped_df, width='stretch')
+    st.dataframe(pivot_df.style.format("{:.2f}"), width='stretch')
 
     st.header("Campaign Level Data")
 
@@ -1938,8 +1968,8 @@ elif selected == "FB API Campaign spends" and st.session_state.status == "verifi
     else:  # Date
         pivot_df = pivot_df[sorted(pivot_df.columns, key=lambda x: pd.to_datetime(x), reverse=True)]
 
-    # st.dataframe(grouped_df, use_container_width=True)
-    st.dataframe(pivot_df, use_container_width=True)
+    # st.dataframe(grouped_df, width='stretch')
+    st.dataframe(pivot_df, width='stretch')
 
     # Display grouped data
     st.header(f"Spend Data Campaign Level - {grouping} USD View")
@@ -1950,11 +1980,11 @@ elif selected == "FB API Campaign spends" and st.session_state.status == "verifi
     pivot_df = pivot_df.reindex(sorted(pivot_df.columns, reverse=True), axis=1)
 
 
-    st.dataframe(pivot_df, use_container_width=True)
+    st.dataframe(pivot_df, width='stretch')
     
     # Display full table
     st.header("Full Table")
-    st.dataframe(ai_campaign_spends_df, use_container_width=True)
+    st.dataframe(ai_campaign_spends_df, width='stretch')
 
    
 elif selected == "Disabled Ad Accounts" and st.session_state.status == "verified":
@@ -1991,7 +2021,7 @@ elif selected == "Disabled Ad Accounts" and st.session_state.status == "verified
 
     disabled_account_df = disabled_account_df.sort_values(by='disable_date', ascending=False)
 
-    # st.dataframe(disabled_account_df, use_container_width=True)
+    # st.dataframe(disabled_account_df, width='stretch')
 
     flag = st.selectbox("Select Disabled/Reactived", ("Disabled", "Reactivated"))
 
@@ -2024,7 +2054,7 @@ elif selected == "Disabled Ad Accounts" and st.session_state.status == "verified
         disabled_account_df = disabled_account_df[disabled_account_df['flag'] == 'Reactivated'].reset_index(drop=True)
         disabled_account_df.index+=1
 
-    st.dataframe(disabled_account_df, use_container_width=True)
+    st.dataframe(disabled_account_df, width='stretch')
 
 
 # elif selected == "Datong API VS Total Spends" and st.session_state.status == "verified":
@@ -2037,7 +2067,7 @@ elif selected == "Disabled Ad Accounts" and st.session_state.status == "verified
 
 #     datong_api_df['dt'] = pd.to_datetime(datong_api_df['dt'])
 
-#     st.dataframe(datong_api_df, use_container_width=True)
+#     st.dataframe(datong_api_df, width='stretch')
 
 #     #group by choosing date
 #     grouping = st.selectbox('Choose Grouping', ['Year', 'Month', 'Week', 'Date'], index=1)
@@ -2148,12 +2178,12 @@ elif selected == "Disabled Ad Accounts" and st.session_state.status == "verified
 
     
 
-#     # st.dataframe(grouped_df, use_container_width=True)
-#     st.dataframe(pivot_df, use_container_width=True)
+#     # st.dataframe(grouped_df, width='stretch')
+#     st.dataframe(pivot_df, width='stretch')
     
 #     # Display full table
 #     st.header("Full Table")
-#     st.dataframe(datong_api_df, use_container_width=True)
+#     st.dataframe(datong_api_df, width='stretch')
 
    
 
@@ -2413,13 +2443,13 @@ elif selected == "Summary" and st.session_state.status == "verified":
 
 
     st.write("Final DataFrame:")
-    st.dataframe(merged_df, use_container_width=True)
+    st.dataframe(merged_df, width='stretch')
 
     st.write("EUID X Disabled/Reactivated Accounts")
     df_counts = merged_df.groupby(['euid_x','flag']).size().reset_index(name='counts')
     df_pivot = df_counts.pivot(index='euid_x', columns='flag', values='counts')
     df_pivot['Total'] = df_pivot.sum(axis=1)
-    st.dataframe(df_pivot, use_container_width=True)
+    st.dataframe(df_pivot, width='stretch')
     
     currency_options = ['All','INR','USD']
     currency = st.selectbox("Select BM", currency_options)
@@ -2442,7 +2472,7 @@ elif selected == "Summary" and st.session_state.status == "verified":
     st.write("Monthly Unique Ad Account Creation VS Disabled/Reactivated Accounts")
     merged_df_monthly = merged_df_monthly.pivot(index='ad_account_created_at', columns='flag', values='unique_ad_account_ids')
     merged_df_monthly['Total'] = merged_df_monthly.sum(axis=1)
-    st.dataframe(merged_df_monthly, use_container_width=True)
+    st.dataframe(merged_df_monthly, width='stretch')
 
     daterange = st.date_input("Select Date Range", value=[datetime.now() - timedelta(days=30), datetime.now()])
 
@@ -2454,7 +2484,7 @@ elif selected == "Summary" and st.session_state.status == "verified":
 
     merged_df['spend'] = merged_df['spend'].fillna(0)
 
-    st.dataframe(merged_df, use_container_width=True)
+    st.dataframe(merged_df, width='stretch')
 
 
 
@@ -2569,11 +2599,11 @@ elif selected == "BID - BUID Mapping" and st.session_state.status == "verified":
 
     bid_selection = st.number_input("Enter BID", min_value=0, step=1, key='bid')
 
-    st.dataframe(bid_buid_df[bid_buid_df['bid']==bid_selection], use_container_width=True)
+    st.dataframe(bid_buid_df[bid_buid_df['bid']==bid_selection], width='stretch')
 
     # buid_selection = st.number_input("Enter BUID", min_value=0, step=1, key='buid')
 
-    # st.dataframe(bid_buid_df[bid_buid_df['buid']==buid_selection], use_container_width=True)
+    # st.dataframe(bid_buid_df[bid_buid_df['buid']==buid_selection], width='stretch')
 
 
 
@@ -2583,13 +2613,13 @@ elif selected == "Raw Data" and st.session_state.status == "verified":
     st.write("This is where raw data will be displayed.")
 
     st.write("acc list")
-    st.dataframe(account_list_df, use_container_width=True)
+    st.dataframe(account_list_df, width='stretch')
 
     st.write("datong_acc_list_df dump")
-    st.dataframe(datong_acc_list_df, use_container_width=True)
+    st.dataframe(datong_acc_list_df, width='stretch')
 
     st.write("roposo acc list dump")
-    st.dataframe(roposo_acc_list_df, use_container_width=True)
+    st.dataframe(roposo_acc_list_df, width='stretch')
 
     df['dt'] = pd.to_datetime(df['dt'])
 
@@ -2606,45 +2636,45 @@ elif selected == "Raw Data" and st.session_state.status == "verified":
     # Filter the DataFrame
     filtered_df = df[(df['dt'] >= start_datetime) & (df['dt'] <= end_datetime)]
 
-    st.dataframe(filtered_df, use_container_width=True)
+    st.dataframe(filtered_df, width='stretch')
 
     st.write("Ad account and EUID list raw dump")
-    st.dataframe(list_df, use_container_width=True)
+    st.dataframe(list_df, width='stretch')
 
     # st.write("Zocket AI Spends raw dump")
-    # st.dataframe(ai_spends_df, use_container_width=True)
+    # st.dataframe(ai_spends_df, width='stretch')
 
     st.write("FBI API spends raw dump")
-    st.dataframe(ai_campaign_spends_df, use_container_width=True)
+    st.dataframe(ai_campaign_spends_df, width='stretch')
 
     st.write("Disabled accounts raw dump")
-    st.dataframe(disabled_account_df, use_container_width=True)
+    st.dataframe(disabled_account_df, width='stretch')
 
     # st.write("Datong API raw dump")
-    # st.dataframe(datong_api_df, use_container_width=True)
+    # st.dataframe(datong_api_df, width='stretch')
 
     st.write("FBI API spends raw dump")
-    st.dataframe(ai_campaign_spends_df, use_container_width=True)
+    st.dataframe(ai_campaign_spends_df, width='stretch')
 
 
 if selected == "Overages" and st.session_state.status == "verified":
 
     st.title("Payments dump")
 
-    st.dataframe(payments_df, use_container_width=True)
+    st.dataframe(payments_df, width='stretch')
 
     st.title("Overages dump")
-    st.dataframe(overages_df, use_container_width=True)
+    st.dataframe(overages_df, width='stretch')
 
     buid = st.number_input("Enter BUID", min_value=0, step=1, key='buid')
 
     st.write(f"Payments for BUID: {buid}")
 
-    st.dataframe(payments_df[payments_df['zocket_user_id']==buid], use_container_width=True)
+    st.dataframe(payments_df[payments_df['zocket_user_id']==buid], width='stretch')
 
     st.write(f"Overages for BUID: {buid}")
 
-    st.dataframe(overages_df[overages_df['user_id']==buid], use_container_width=True)
+    st.dataframe(overages_df[overages_df['user_id']==buid], width='stretch')
 
     st.title("Overages Summary")
 
@@ -2655,7 +2685,7 @@ if selected == "Overages" and st.session_state.status == "verified":
 
     overages_summary = overages_summary.pivot(index=['user_id','flag','currency'], columns='month', values='overage_fee')
 
-    st.dataframe(overages_summary, use_container_width=True)
+    st.dataframe(overages_summary, width='stretch')
 
     st.title("Payment Summary")
 
@@ -2666,7 +2696,7 @@ if selected == "Overages" and st.session_state.status == "verified":
 
     payments_summary = payments_summary.pivot(index='zocket_user_id', columns='month', values='amount')
 
-    st.dataframe(payments_summary, use_container_width=True)
+    st.dataframe(payments_summary, width='stretch')
 
 elif selected == "US Finance Mappings" and st.session_state.status == "verified":
 
@@ -2675,7 +2705,7 @@ elif selected == "US Finance Mappings" and st.session_state.status == "verified"
     st.title("Finance Mappings")
 
     st.write("Finance Transactions dump")
-    st.dataframe(finance_trxns_df, use_container_width=True)
+    st.dataframe(finance_trxns_df, width='stretch')
 
     st.write("Finance Mappings")
 
@@ -2685,7 +2715,7 @@ elif selected == "US Finance Mappings" and st.session_state.status == "verified"
     if invoice_ids:
         invoice_ids_list = [x.strip() for x in invoice_ids.split(',') if x.strip()]
         finance_trxns_df = finance_trxns_df[finance_trxns_df['payment_transcation_id'].isin(invoice_ids_list)]
-        st.dataframe(finance_trxns_df, use_container_width=True)
+        st.dataframe(finance_trxns_df, width='stretch')
 
 
 
@@ -2696,7 +2726,7 @@ elif selected == "Overall Finance Mappings" and st.session_state.status == "veri
     st.title("Finance Mappings")
 
     st.write("Finance Transactions dump")
-    st.dataframe(finance_trxns_df, use_container_width=True)
+    st.dataframe(finance_trxns_df, width='stretch')
 
     st.write("Finance Mappings")
 
@@ -2706,7 +2736,7 @@ elif selected == "Overall Finance Mappings" and st.session_state.status == "veri
     if invoice_ids:
         invoice_ids_list = [x.strip() for x in invoice_ids.split(',') if x.strip()]
         finance_trxns_df = finance_trxns_df[finance_trxns_df['payment_transcation_id'].isin(invoice_ids_list)]
-        st.dataframe(finance_trxns_df, use_container_width=True)
+        st.dataframe(finance_trxns_df, width='stretch')
 
 
 elif selected == "FB Reward Ad accounts stats" and st.session_state.status == "verified":
@@ -2873,6 +2903,6 @@ elif selected == "FB Reward Ad accounts stats" and st.session_state.status == "v
                     "Objective": objectives,
                     "Targeting": targeting
                 })
-            st.dataframe(pd.DataFrame(results), use_container_width=True)
+            st.dataframe(pd.DataFrame(results), width='stretch')
     else:
         st.info("No ad account IDs found in the sheet.")

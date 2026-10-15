@@ -7,3 +7,5 @@ stripe
 numpy
 requests
 plotly
+gspread
+google-auth

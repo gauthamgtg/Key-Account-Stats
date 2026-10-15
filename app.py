@@ -10,6 +10,7 @@ import json
 import stripe
 import numpy
 import requests
+import gspread
 from urllib.parse import urlparse
 
 
@@ -89,6 +90,23 @@ ACCOUNT_LIST_CSV_URL = (
     "https://docs.google.com/spreadsheets/d/1JvJ5Pa5qFDvXq1KaR0YTiReUM39P0berAgtSEkvCnIs/export?format=csv"
 )
 
+# Meta spends sheet is not link-shareable, so it is read with the service account
+# stored under [gcp_service_account] in secrets instead of the CSV export URL.
+META_SPENDS_SHEET_ID = "1M3bPRNtU81TzmD-MFdXKFcz7fhdfauAgNp7ZYSDvUkg"
+META_SPENDS_GID = 557490510
+
+# Sheet header -> internal column name, in the order the columns appear on the tab.
+META_SPENDS_FIELDS = {
+    "month": "month",
+    "business_user_id": "business_user_id",
+    "spend": "spend_native",
+    "ad_account_id": "ad_account_id",
+    "currency": "currency",
+    "Spend in USD": "spend_usd",
+    "Parent Euid": "parent_euid",
+    "Platform": "platform",
+}
+
 
 PAGE_REQUIREMENTS = {
     "Login": frozenset(),
@@ -99,6 +117,7 @@ PAGE_REQUIREMENTS = {
     "BID - BUID Mapping": frozenset({"bid"}),
     "Top accounts": frozenset(),
     "FB API Campaign spends": frozenset({"ai_campaign"}),
+    "Meta Spends": frozenset(),
     "Disabled Ad Accounts": frozenset({"disabled", "sheets"}),
     "Summary": frozenset({"main", "list", "disabled", "sheets"}),
     "BM Summary": frozenset({"main"}),
@@ -189,6 +208,82 @@ def load_account_sheet_bundle() -> dict:
     }
 
 
+def _google_service_account_info() -> dict:
+    """Service account JSON, stored in secrets as a raw JSON string or as a TOML table."""
+    try:
+        raw = st.secrets["GOOGLE_SERVICE_ACCOUNT_KEY"]
+    except (KeyError, FileNotFoundError) as exc:
+        raise RuntimeError(
+            "GOOGLE_SERVICE_ACCOUNT_KEY is missing from Streamlit secrets."
+        ) from exc
+    if isinstance(raw, str):
+        try:
+            return json.loads(raw)
+        except json.JSONDecodeError as exc:
+            raise RuntimeError(
+                "GOOGLE_SERVICE_ACCOUNT_KEY is not valid JSON. In secrets.toml the "
+                "service account JSON must be wrapped in triple quotes ('''{...}''')."
+            ) from exc
+    return dict(raw)
+
+
+def _sheet_money_to_float(values: pd.Series) -> pd.Series:
+    """Sheet amounts arrive as text and may carry currency symbols, thousands separators or #N/A."""
+    cleaned = (
+        values.astype(str)
+        .str.strip()
+        .str.replace(r"[^\d.\-()]", "", regex=True)
+        .str.replace(r"^\((.*)\)$", r"-\1", regex=True)
+    )
+    return pd.to_numeric(cleaned, errors="coerce")
+
+
+@st.cache_data(ttl=3600)
+def load_meta_spends_df() -> pd.DataFrame:
+    """Monthly platform spends from the private spends sheet, read via the service account."""
+    try:
+        client = gspread.service_account_from_dict(_google_service_account_info())
+        worksheet = client.open_by_key(META_SPENDS_SHEET_ID).get_worksheet_by_id(META_SPENDS_GID)
+        values = worksheet.get_all_values()
+    except RuntimeError:
+        raise
+    except Exception as exc:
+        raise RuntimeError(
+            f"Could not read the Meta spends sheet: {exc}. Confirm the sheet is shared "
+            "with the service account's client_email."
+        ) from exc
+
+    if not values:
+        return pd.DataFrame(columns=list(META_SPENDS_FIELDS.values()))
+
+    # The tab holds unrelated helper columns to the right of the spends block, so keep
+    # only the leading columns that make up the spends table itself.
+    header = [h.strip() for h in values[0][:len(META_SPENDS_FIELDS)]]
+    missing = [col for col in META_SPENDS_FIELDS if col not in header]
+    if missing:
+        raise RuntimeError(f"Meta spends sheet is missing expected column(s): {', '.join(missing)}")
+
+    width = len(header)
+    rows = [(row + [""] * width)[:width] for row in values[1:]]
+    df = pd.DataFrame(rows, columns=header).rename(columns=META_SPENDS_FIELDS)
+
+    # The header text repeats part-way down the tab; those rows are not data.
+    df = df[df["month"].str.strip().str.lower() != "month"]
+
+    month_start = pd.to_datetime(df["month"].str.strip(), dayfirst=True, errors="coerce")
+    df["month_start"] = month_start.dt.to_period("M").dt.to_timestamp()
+    df = df.dropna(subset=["month_start"])
+
+    df["spend_native"] = _sheet_money_to_float(df["spend_native"])
+    df["spend_usd"] = _sheet_money_to_float(df["spend_usd"])
+    for col in ("business_user_id", "ad_account_id", "currency", "parent_euid", "platform"):
+        df[col] = df[col].astype(str).str.strip().replace("", "Unknown")
+
+    df["month_label"] = df["month_start"].dt.strftime("%b %Y")
+    df = df.drop(columns=["month"])
+    return df.sort_values(["month_start", "spend_usd"], ascending=[True, False]).reset_index(drop=True)
+
+
 @st.cache_data(ttl=86400)
 def get_main_spend_enriched() -> pd.DataFrame:
     df = fetch_main_spend_dataframe()
@@ -240,6 +335,7 @@ _CACHE_CLEAR_FUNCS = (
     get_main_spend_enriched,
     load_account_sheet_bundle,
     _load_account_list_csv,
+    load_meta_spends_df,
 )
 
 
@@ -801,8 +897,8 @@ left join zocket_global.partners p on a.partner_id = p.id
 with st.sidebar:
     selected = option_menu(
         menu_title="Navigation",  # Required
-        options=["Login","Key Account Stats","Overall Stats - Ind","Overall Stats - US","Euid - adaccount mapping","BID - BUID Mapping","Top accounts","FB API Campaign spends","Disabled Ad Accounts","Summary","BM Summary", "Raw Data","Overages","US Finance Mappings","Overall Finance Mappings"],  # Required
-        icons=["lock","airplane-engines","currency-rupee",'currency-dollar','link',"link-45deg","graph-up","suit-spade","slash-circle","book","book-fill", "table","bi-coin","bi-safe2-fill","bi-piggy-bank"],  # Optional: icons from the Bootstrap library
+        options=["Login","Key Account Stats","Overall Stats - Ind","Overall Stats - US","Euid - adaccount mapping","BID - BUID Mapping","Top accounts","FB API Campaign spends","Meta Spends","Disabled Ad Accounts","Summary","BM Summary", "Raw Data","Overages","US Finance Mappings","Overall Finance Mappings"],  # Required
+        icons=["lock","airplane-engines","currency-rupee",'currency-dollar','link',"link-45deg","graph-up","suit-spade","calendar3","slash-circle","book","book-fill", "table","bi-coin","bi-safe2-fill","bi-piggy-bank"],  # Optional: icons from the Bootstrap library
         menu_icon="cast",  # Optional: main menu icon
         default_index=0,  # Default active menu item
     )
@@ -2906,3 +3002,124 @@ elif selected == "FB Reward Ad accounts stats" and st.session_state.status == "v
             st.dataframe(pd.DataFrame(results), width='stretch')
     else:
         st.info("No ad account IDs found in the sheet.")
+
+elif selected == "Meta Spends" and st.session_state.status == "verified":
+    st.title("Meta Spends")
+    st.write("Month-wise total spends from the spends sheet. All amounts are in USD.")
+
+    try:
+        meta_spends_df = load_meta_spends_df()
+    except RuntimeError as exc:
+        st.error(str(exc))
+        st.stop()
+
+    if meta_spends_df.empty:
+        st.warning("The spends sheet returned no usable rows.")
+        st.stop()
+
+    platform_options = sorted(meta_spends_df['platform'].unique())
+    currency_options = sorted(meta_spends_df['currency'].unique())
+    month_options = list(
+        meta_spends_df.drop_duplicates('month_start').sort_values('month_start')['month_label']
+    )
+
+    filter_col1, filter_col2, filter_col3 = st.columns(3)
+    selected_platforms = filter_col1.multiselect(
+        "Platform",
+        platform_options,
+        default=["Meta"] if "Meta" in platform_options else platform_options,
+    )
+    selected_currencies = filter_col2.multiselect(
+        "Billing currency", currency_options, default=currency_options
+    )
+    if len(month_options) > 1:
+        start_month, end_month = filter_col3.select_slider(
+            "Month range", options=month_options, value=(month_options[0], month_options[-1])
+        )
+    else:
+        start_month = end_month = month_options[0]
+    month_window = month_options[month_options.index(start_month): month_options.index(end_month) + 1]
+
+    filtered_df = meta_spends_df[
+        meta_spends_df['platform'].isin(selected_platforms)
+        & meta_spends_df['currency'].isin(selected_currencies)
+        & meta_spends_df['month_label'].isin(month_window)
+    ]
+
+    if filtered_df.empty:
+        st.warning("No rows match the selected filters.")
+        st.stop()
+
+    unreadable_amounts = int(filtered_df['spend_usd'].isna().sum())
+    ordered_months = [m for m in month_window if m in set(filtered_df['month_label'])]
+
+    metric_col1, metric_col2, metric_col3, metric_col4 = st.columns(4)
+    metric_col1.metric("Total Spend (USD)", f"{filtered_df['spend_usd'].sum():,.0f}")
+    metric_col2.metric("Months", filtered_df['month_start'].nunique())
+    metric_col3.metric("Ad Accounts", filtered_df['ad_account_id'].nunique())
+    metric_col4.metric("Parent EUIDs", filtered_df['parent_euid'].nunique())
+
+    st.subheader("Month-wise total spends")
+    monthly_totals = (
+        filtered_df.groupby(['month_start', 'month_label'], as_index=False)
+        .agg(
+            spend_usd=('spend_usd', 'sum'),
+            ad_accounts=('ad_account_id', 'nunique'),
+            parent_euids=('parent_euid', 'nunique'),
+        )
+        .sort_values('month_start')
+    )
+    monthly_totals['mom_change'] = monthly_totals['spend_usd'].pct_change() * 100
+    monthly_display = monthly_totals.drop(columns=['month_start']).rename(
+        columns={
+            'month_label': 'Month',
+            'spend_usd': 'Spend (USD)',
+            'ad_accounts': 'Ad Accounts',
+            'parent_euids': 'Parent EUIDs',
+            'mom_change': 'MoM Change %',
+        }
+    )
+    st.dataframe(
+        monthly_display.style.format(
+            {'Spend (USD)': '{:,.2f}', 'MoM Change %': '{:+.1f}%'}, na_rep="-"
+        ),
+        width='stretch',
+        hide_index=True,
+    )
+
+    st.subheader("Pivot table")
+    pivot_dimensions = {
+        'Parent Euid': 'parent_euid',
+        'Business User ID': 'business_user_id',
+        'Ad Account ID': 'ad_account_id',
+        'Platform': 'platform',
+        'Billing currency': 'currency',
+    }
+    row_label = st.selectbox("Break down rows by", list(pivot_dimensions))
+    row_field = pivot_dimensions[row_label]
+
+    pivot_df = filtered_df.pivot_table(
+        index=row_field,
+        columns='month_label',
+        values='spend_usd',
+        aggfunc='sum',
+        fill_value=0.0,
+    ).reindex(columns=ordered_months, fill_value=0.0)
+    pivot_df['Total'] = pivot_df.sum(axis=1)
+    pivot_df = pivot_df.sort_values('Total', ascending=False)
+    grand_total = pivot_df.sum(axis=0).to_frame().T
+    grand_total.index = ['Total']
+    pivot_df = pd.concat([pivot_df, grand_total])
+    pivot_df.index.name = row_label
+
+    st.dataframe(pivot_df.style.format("{:,.2f}"), width='stretch')
+    st.download_button(
+        "Download pivot as CSV",
+        pivot_df.to_csv().encode("utf-8"),
+        file_name="meta_spends_pivot.csv",
+        mime="text/csv",
+    )
+    if unreadable_amounts:
+        st.caption(
+            f"{unreadable_amounts} row(s) have no readable USD amount in the sheet and count as 0 here."
+        )
